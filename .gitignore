@@ -1,0 +1,14 @@
+*.pyc
+*.pyo
+.DS_Store
+.idea
+.vscode
+*.log
+nohup.out
+/venv/
+*.cache
+*_config.py
+service.log
+**/*.pytest_cache
+src/.pytest_cache
+/model/
