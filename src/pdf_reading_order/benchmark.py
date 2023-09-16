@@ -7,6 +7,7 @@ from sklearn.metrics import f1_score, accuracy_score
 from config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
 from pdf_reading_order.load_labeled_data import load_labeled_data
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
+from model_configuration import CANDIDATE_MODEL_CONFIGURATION
 
 BENCHMARK_MODEL_PATH = Path(join(ROOT_PATH, "model", "candidate_selector_benchmark.model"))
 
@@ -14,6 +15,7 @@ BENCHMARK_MODEL_PATH = Path(join(ROOT_PATH, "model", "candidate_selector_benchma
 def loop_pdf_reading_order_tokens(pdf_reading_order_tokens_list: list[PdfReadingOrderTokens]):
     for pdf_reading_order_tokens in pdf_reading_order_tokens_list:
         for page in pdf_reading_order_tokens.pdf_features.pages:
+            page.tokens = sorted(page.tokens, key=lambda token: pdf_reading_order_tokens.reading_order_by_token[token])
             for i in range(len(page.tokens)):
                 yield i, len(page.tokens[i:])
 
@@ -25,7 +27,7 @@ def train_for_benchmark():
         labels += [1] + [0] * (candidate_tokens_size-1)
 
     pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
-    trainer = ReadingOrderCandidatesTrainer(pdf_features_list, pdf_reading_order_tokens_list)
+    trainer = ReadingOrderCandidatesTrainer(pdf_features_list, CANDIDATE_MODEL_CONFIGURATION)
     os.makedirs(BENCHMARK_MODEL_PATH.parent, exist_ok=True)
     trainer.train(str(BENCHMARK_MODEL_PATH), labels)
 
@@ -37,7 +39,7 @@ def predict_for_benchmark():
         truths += [1] + [0] * (candidate_tokens_size-1)
 
     pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
-    trainer = ReadingOrderCandidatesTrainer(pdf_features_list, pdf_reading_order_tokens_list)
+    trainer = ReadingOrderCandidatesTrainer(pdf_features_list, CANDIDATE_MODEL_CONFIGURATION)
     print("predicting")
     predictions = trainer.predict(BENCHMARK_MODEL_PATH)
     print(len(truths))
