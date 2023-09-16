@@ -1,52 +1,45 @@
 from pathlib import Path
-
 import numpy as np
+from pdf_features.PdfFeatures import PdfFeatures
 from pdf_features.PdfToken import PdfToken
-from pdf_tokens_type_trainer.TokenFeatures import TokenFeatures
-from pdf_tokens_type_trainer.TokenTypeTrainer import TokenTypeTrainer
+from pdf_tokens_type_trainer.PdfTrainer import PdfTrainer
+from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
+from model_configuration import CANDIDATE_MODEL_CONFIGURATION
 
 
-class ReadingOrderCandidatesTrainer(TokenTypeTrainer):
+class ReadingOrderCandidatesTrainer(PdfTrainer):
+    def __init__(self, pdfs_features: list[PdfFeatures], pdf_reading_order_tokens_list: list[PdfReadingOrderTokens]):
+        super().__init__(pdfs_features, CANDIDATE_MODEL_CONFIGURATION)
+        print(f"{CANDIDATE_MODEL_CONFIGURATION.lambda_l1=}")
+        self.pdf_reading_order_tokens_list: list[PdfReadingOrderTokens] = pdf_reading_order_tokens_list
+
+    @staticmethod
+    def get_candidate_token_features(token_1: PdfToken, token_2: PdfToken):
+        return [token_1.bounding_box.top, token_1.bounding_box.left, token_1.bounding_box.right, token_1.bounding_box.bottom,
+                token_2.bounding_box.top, token_2.bounding_box.left, token_2.bounding_box.right, token_2.bounding_box.bottom,
+                token_1.bounding_box.bottom - token_2.bounding_box.top
+                ]
+
+    def loop_labels(self):
+        for pdf_reading_order_tokens in self.pdf_reading_order_tokens_list:
+            for page in pdf_reading_order_tokens.pdf_features.pages:
+                if not page.tokens:
+                    continue
+                page_tokens = [self.get_padding_token(-1, page.page_number)]
+                page_tokens += sorted(page.tokens, key=lambda token: pdf_reading_order_tokens.reading_order_by_token[token])
+                for i, current_token in enumerate(page_tokens):
+                    yield i, page_tokens, current_token
 
     def get_model_input(self):
         features_rows = []
-        y = np.array([])
+        for i, page_tokens, current_token in self.loop_labels():
+            features_rows.extend([self.get_candidate_token_features(current_token, token_2) for token_2 in page_tokens[i+1:]])
 
-        contex_size = self.model_configuration.context_size
-        for token_features, page in self.loop_pages():
-            page_tokens = [
-                self.get_padding_token(segment_number=i - 999999, page_number=page.page_number) for i in range(contex_size)
-            ]
-            page_tokens += page.tokens
-            page_tokens += [
-                self.get_padding_token(segment_number=999999 + i, page_number=page.page_number) for i in range(contex_size)
-            ]
-
-            tokens_indexes = range(contex_size, len(page_tokens) - contex_size)
-            page_features = [self.get_context_features(token_features, page_tokens, i) for i in tokens_indexes]
-            features_rows.extend(page_features)
-
-            y = np.append(y, [int(page_tokens[i].segment_no == page_tokens[i + 1].segment_no) for i in tokens_indexes])
-
-        return self.features_rows_to_x(features_rows), y
-
-    @staticmethod
-    def get_labels(page_tokens: list[PdfToken], tokens_indexes: range):
-        return [page_tokens[i].token_type.get_index() for i in tokens_indexes]
-
-    def get_context_features(self, token_features: TokenFeatures, page_tokens: list[PdfToken], token_index: int):
-        token_row_features = list()
-        first_token_from_context = token_index - self.model_configuration.context_size
-        for i in range(self.model_configuration.context_size * 2):
-            first_token = page_tokens[first_token_from_context + i]
-            second_token = page_tokens[first_token_from_context + i + 1]
-            features = token_features.get_features(first_token, second_token, page_tokens)
-            features += self.get_paragraph_extraction_features(first_token, second_token)
-            token_row_features.extend(features)
-
-        return token_row_features
+        return self.features_rows_to_x(features_rows)
 
     def predict(self, model_path: str | Path = None):
-        token_type_trainer = TokenTypeTrainer(self.pdfs_features)
-        token_type_trainer.set_token_types()
-        super().predict(model_path)
+        prediction_scores = super().predict(model_path)
+        predictions = []
+        for prediction_score in prediction_scores:
+            predictions.append(int(np.argmax(prediction_score)))
+        return predictions
