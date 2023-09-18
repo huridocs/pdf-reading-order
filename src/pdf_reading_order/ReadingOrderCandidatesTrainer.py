@@ -1,5 +1,6 @@
 from pathlib import Path
 import numpy as np
+from pdf_features.PdfPage import PdfPage
 from pdf_features.PdfToken import PdfToken
 from pdf_tokens_type_trainer.PdfTrainer import PdfTrainer
 
@@ -13,20 +14,26 @@ class ReadingOrderCandidatesTrainer(PdfTrainer):
                 token_1.bounding_box.bottom - token_2.bounding_box.top
                 ]
 
-    def loop_labels(self):
+    def loop_pages(self):
         for pdf_features in self.pdfs_features:
             for page in pdf_features.pages:
-                if not page.tokens:
-                    continue
-                page_tokens = [self.get_padding_token(-1, page.page_number)]
-                page_tokens += page.tokens
-                for i, current_token in enumerate(page_tokens):
-                    yield page_tokens[i+1:], current_token
+                yield page
+
+    def loop_token_combinations_in_page(self, page: PdfPage):
+        sorted_page_tokens = [self.get_padding_token(-1, page.page_number)] + page.tokens
+        for i, current_token in enumerate(sorted_page_tokens):
+            for token_2 in sorted_page_tokens[i + 1:]:
+                yield current_token, token_2
+
+    def loop_token_combinations(self):
+        for page in self.loop_pages():
+            for current_token, token_2 in self.loop_token_combinations_in_page(page):
+                yield current_token, token_2
 
     def get_model_input(self):
         features_rows = []
-        for candidate_tokens, current_token in self.loop_labels():
-            features_rows.extend([self.get_candidate_token_features(current_token, token_2) for token_2 in candidate_tokens])
+        for current_token, token_2 in list(self.loop_token_combinations()):
+            features_rows.append(self.get_candidate_token_features(current_token, token_2))
 
         return self.features_rows_to_x(features_rows)
 
