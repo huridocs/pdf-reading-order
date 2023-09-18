@@ -4,10 +4,10 @@ from pathlib import Path
 from time import time
 from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 from sklearn.metrics import f1_score, accuracy_score
-from config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
+from pdf_reading_order.config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
 from pdf_reading_order.load_labeled_data import load_labeled_data
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
-from model_configuration import CANDIDATE_MODEL_CONFIGURATION
+from pdf_reading_order.model_configuration import CANDIDATE_MODEL_CONFIGURATION
 
 BENCHMARK_MODEL_PATH = Path(join(ROOT_PATH, "model", "candidate_selector_benchmark.model"))
 

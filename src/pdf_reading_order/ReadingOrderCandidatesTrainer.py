@@ -33,7 +33,7 @@ class ReadingOrderCandidatesTrainer(PdfTrainer):
 
     def get_model_input(self):
         features_rows = []
-        for current_token, possible_candidate_token in list(self.loop_token_combinations()):
+        for current_token, possible_candidate_token in self.loop_token_combinations():
             features_rows.append(self.get_candidate_token_features(current_token, possible_candidate_token))
 
         return self.features_rows_to_x(features_rows)
