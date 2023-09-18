@@ -22,18 +22,19 @@ class ReadingOrderCandidatesTrainer(PdfTrainer):
     def loop_token_combinations_in_page(self, page: PdfPage):
         sorted_page_tokens = [self.get_padding_token(-1, page.page_number)] + page.tokens
         for i, current_token in enumerate(sorted_page_tokens):
-            for token_2 in sorted_page_tokens[i + 1:]:
-                yield current_token, token_2
+            possible_candidate_tokens = sorted_page_tokens[i + 1:]
+            for possible_candidate_token in possible_candidate_tokens:
+                yield current_token, possible_candidate_token
 
     def loop_token_combinations(self):
         for page in self.loop_pages():
-            for current_token, token_2 in self.loop_token_combinations_in_page(page):
-                yield current_token, token_2
+            for current_token, possible_candidate_token in self.loop_token_combinations_in_page(page):
+                yield current_token, possible_candidate_token
 
     def get_model_input(self):
         features_rows = []
-        for current_token, token_2 in list(self.loop_token_combinations()):
-            features_rows.append(self.get_candidate_token_features(current_token, token_2))
+        for current_token, possible_candidate_token in list(self.loop_token_combinations()):
+            features_rows.append(self.get_candidate_token_features(current_token, possible_candidate_token))
 
         return self.features_rows_to_x(features_rows)
 
