@@ -1,15 +1,17 @@
 from os.path import join
+
+from pdf_features.PdfPage import PdfPage
 from pdf_token_type_labels.TokenTypeLabels import TokenTypeLabels
-from pdf_features.PdfToken import PdfToken
 from pdf_features.PdfFeatures import PdfFeatures
+from pdf_reading_order.ReadingOrderLabelPage import ReadingOrderLabelPage
 from pdf_reading_order.config import READING_ORDER_RELATIVE_PATH
 from pdf_tokens_type_trainer.config import LABELS_FILE_NAME
 
 
 class PdfReadingOrderTokens:
-    def __init__(self, pdf_features: PdfFeatures, reading_order_by_token: dict[PdfToken, int]):
+    def __init__(self, pdf_features: PdfFeatures, labeled_page_by_raw_page: dict[PdfPage, ReadingOrderLabelPage]):
         self.pdf_features: PdfFeatures = pdf_features
-        self.reading_order_by_token: dict[PdfToken, int] = reading_order_by_token
+        self.labeled_page_by_raw_page: dict[PdfPage, ReadingOrderLabelPage] = labeled_page_by_raw_page
 
     @staticmethod
     def loop_labels(reading_order_labels):
@@ -27,13 +29,17 @@ class PdfReadingOrderTokens:
 
     @staticmethod
     def set_reading_orders(pdf_features: PdfFeatures, reading_order_labels: TokenTypeLabels):
-        reading_order_by_token: dict[PdfToken, int] = {}
+        labeled_page_by_raw_page: dict[PdfPage, ReadingOrderLabelPage] = {}
+        last_page = None
         for page, token in pdf_features.loop_tokens():
+            if page != last_page:
+                labeled_page_by_raw_page[page] = ReadingOrderLabelPage()
+                last_page = page
             for label, label_page_number in PdfReadingOrderTokens.loop_labels(reading_order_labels):
                 if page.page_number != label_page_number:
                     continue
                 if token.inside_label(label):
-                    reading_order_by_token[token] = label.token_type
+                    labeled_page_by_raw_page[page].reading_order_by_token_id[token.id] = label.token_type
                     break
 
-        return PdfReadingOrderTokens(pdf_features, reading_order_by_token)
+        return PdfReadingOrderTokens(pdf_features, labeled_page_by_raw_page)
