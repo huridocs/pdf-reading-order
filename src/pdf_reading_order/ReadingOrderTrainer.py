@@ -94,13 +94,16 @@ class ReadingOrderTrainer(TokenTypeTrainer):
         page.tokens.sort(key=lambda _token: _token.prediction)
 
     def get_reading_ordered_pages(self, model_path: str | Path = None):
+        token_type_trainer = TokenTypeTrainer(self.pdfs_features)
+        token_type_trainer.set_token_types()
         lightgbm_model = lgb.Booster(model_file=model_path)
         for token_features, page in self.loop_token_features():
             reading_order_by_token_id = self.get_reading_orders_for_page(page, lightgbm_model, token_features)
             self.reorder_page_tokens(page, reading_order_by_token_id)
 
     def predict(self, model_path: str | Path = None):
-        # super().set_token_types()
+        token_type_trainer = TokenTypeTrainer(self.pdfs_features)
+        token_type_trainer.set_token_types()
         x = self.get_model_input()
         if not x.any():
             return self.pdfs_features
