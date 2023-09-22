@@ -6,8 +6,11 @@ from os.path import join
 from pdf_features.PdfPage import PdfPage
 from pdf_features.PdfToken import PdfToken
 from pdf_token_type_labels.TokenType import TokenType
+from pdf_tokens_type_trainer.PdfTrainer import PdfTrainer
 from pdf_tokens_type_trainer.TokenFeatures import TokenFeatures
 from pdf_tokens_type_trainer.TokenTypeTrainer import TokenTypeTrainer
+from tqdm import tqdm
+
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
 from pdf_reading_order.config import ROOT_PATH
 
@@ -15,7 +18,7 @@ CANDIDATE_COUNT = 18
 CANDIDATE_TOKEN_MODEL = lgb.Booster(model_file=Path(join(ROOT_PATH, "model", "candidate_selector_benchmark.model")))
 
 
-class ReadingOrderTrainer(TokenTypeTrainer):
+class ReadingOrderTrainer(PdfTrainer):
 
     def get_candidate_tokens_for_current_token(self, current_token: PdfToken, possible_candidate_tokens: list[PdfToken]):
         features = [ReadingOrderCandidatesTrainer.get_candidate_token_features(current_token, candidate_token)
@@ -41,6 +44,16 @@ class ReadingOrderTrainer(TokenTypeTrainer):
         features += self.get_token_type_features(candidate_token_2)
         return features
 
+    def loop_token_features(self):
+        for pdf_features in tqdm(self.pdfs_features):
+            token_features = TokenFeatures(pdf_features)
+
+            for page in pdf_features.pages:
+                if not page.tokens:
+                    continue
+
+                yield token_features, page
+
     def loop_candidate_tokens_in_page(self, page: PdfPage):
         page_tokens = [self.get_padding_token(-1, page.page_number)] + page.tokens
         for current_token in page_tokens:
@@ -63,7 +76,7 @@ class ReadingOrderTrainer(TokenTypeTrainer):
 
         return self.features_rows_to_x(features_rows)
 
-    def find_next_token_from_candidates(self, lightgbm_model: lgb.Booster, current_token: PdfToken, candidate_tokens: list[PdfToken], token_features: TokenFeatures, page_tokens: list[PdfToken]):
+    def find_next_token_from_candidates(self, lightgbm_model: lgb.Booster, token_features: TokenFeatures, page_tokens: list[PdfToken], candidate_tokens: list[PdfToken], current_token: PdfToken):
         next_token = candidate_tokens[0]
         for candidate_token in candidate_tokens[1:]:
             X = self.features_rows_to_x([self.get_reading_order_features(current_token, next_token, candidate_token, token_features, page_tokens)])
@@ -71,20 +84,25 @@ class ReadingOrderTrainer(TokenTypeTrainer):
                 next_token = candidate_token
         return next_token
 
-    def get_reading_orders_for_page(self, page: PdfPage, lightgbm_model: lgb.Booster, token_features: TokenFeatures):
+    def get_next_token(self, lightgbm_model: lgb.Booster, token_features: TokenFeatures, page: PdfPage, remaining_tokens: list[PdfToken], current_token: PdfToken):
+        possible_candidate_tokens = [token for token in remaining_tokens if token != current_token]
+        if len(possible_candidate_tokens) < 2:
+            possible_candidate_tokens.append(possible_candidate_tokens[0])
+        candidate_tokens = self.get_candidate_tokens_for_current_token(current_token, possible_candidate_tokens)
+        next_token = self.find_next_token_from_candidates(lightgbm_model, token_features, page.tokens, candidate_tokens, current_token)
+        return next_token
+
+    def get_reading_orders_for_page(self, lightgbm_model: lgb.Booster, token_features: TokenFeatures, page: PdfPage):
         current_token = self.get_padding_token(-1, page.page_number)
         remaining_tokens = [current_token] + page.tokens
         reading_order_by_token_id = {}
         current_reading_order_no = 1
         for i in range(len(page.tokens)):
-            possible_candidate_tokens = [token for token in remaining_tokens if token != current_token]
-            if len(possible_candidate_tokens) < 2:
-                possible_candidate_tokens.append(possible_candidate_tokens[0])
-            candidate_tokens = self.get_candidate_tokens_for_current_token(current_token, possible_candidate_tokens)
-            next_token = self.find_next_token_from_candidates(lightgbm_model, current_token, candidate_tokens, token_features, page.tokens)
+            next_token = self.get_next_token(lightgbm_model, token_features, page, remaining_tokens, current_token)
             remaining_tokens.remove(next_token)
             reading_order_by_token_id[next_token.id] = current_reading_order_no
             current_reading_order_no += 1
+
         return reading_order_by_token_id
 
     @staticmethod
@@ -98,17 +116,11 @@ class ReadingOrderTrainer(TokenTypeTrainer):
         token_type_trainer.set_token_types()
         lightgbm_model = lgb.Booster(model_file=model_path)
         for token_features, page in self.loop_token_features():
-            reading_order_by_token_id = self.get_reading_orders_for_page(page, lightgbm_model, token_features)
+            reading_order_by_token_id = self.get_reading_orders_for_page(lightgbm_model, token_features, page)
             self.reorder_page_tokens(page, reading_order_by_token_id)
 
     def predict(self, model_path: str | Path = None):
-        token_type_trainer = TokenTypeTrainer(self.pdfs_features)
-        token_type_trainer.set_token_types()
-        x = self.get_model_input()
-        if not x.any():
-            return self.pdfs_features
-        lightgbm_model = lgb.Booster(model_file=model_path)
-        prediction_scores = lightgbm_model.predict(x)
+        prediction_scores = super().predict(model_path)
         predictions = []
         for prediction_score in prediction_scores:
             predictions.append(int(np.argmax(prediction_score)))
