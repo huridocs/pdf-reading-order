@@ -12,3 +12,5 @@ service.log
 **/*.pytest_cache
 src/.pytest_cache
 /model/
+/src/data/
+/src/tuned_parameters/
