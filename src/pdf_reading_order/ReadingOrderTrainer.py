@@ -70,6 +70,8 @@ class ReadingOrderTrainer(PdfTrainer):
                 yield current_token, candidate_token_1, candidate_token_2, token_features, page
 
     def get_model_input(self):
+        token_type_trainer = TokenTypeTrainer(self.pdfs_features)
+        token_type_trainer.set_token_types()
         features_rows = []
         for current_token, candidate_token_1, candidate_token_2, token_features, page in list(self.loop_candidate_tokens()):
             features_rows.append(self.get_reading_order_features(current_token, candidate_token_1, candidate_token_2, token_features, page.tokens))
