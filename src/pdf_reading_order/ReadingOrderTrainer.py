@@ -24,7 +24,7 @@ class ReadingOrderTrainer(PdfTrainer):
         features = [ReadingOrderCandidatesTrainer.get_candidate_token_features(current_token, candidate_token)
                     for candidate_token in possible_candidate_tokens]
         prediction_scores = CANDIDATE_TOKEN_MODEL.predict(self.features_rows_to_x(features))
-        candidate_token_indexes = np.argsort(prediction_scores, axis=1)[:, -CANDIDATE_COUNT:]
+        candidate_token_indexes = np.argsort([prediction_scores[:, 1]], axis=1)[:, -CANDIDATE_COUNT:]
         candidate_tokens = [possible_candidate_tokens[i] for i in candidate_token_indexes[0]]
         return candidate_tokens
 
@@ -59,7 +59,7 @@ class ReadingOrderTrainer(PdfTrainer):
         for current_token in page_tokens:
             possible_candidate_tokens = [token for token in page_tokens if token != current_token and token.id != "pad_token"]
             if len(possible_candidate_tokens) < 2:
-                possible_candidate_tokens.append(possible_candidate_tokens[0])
+                continue
             candidate_tokens = self.get_candidate_tokens_for_current_token(current_token, possible_candidate_tokens)
             for candidate_token_1, candidate_token_2 in permutations(candidate_tokens, 2):
                 yield current_token, candidate_token_1, candidate_token_2
