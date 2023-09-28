@@ -3,8 +3,9 @@ from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 
 
 class CandidatesEvaluator:
-    def __init__(self, pdf_reading_order: PdfReadingOrderTokens, candidates_scores: list[CandidateScore],
-                 candidates_count: int):
+    def __init__(
+        self, pdf_reading_order: PdfReadingOrderTokens, candidates_scores: list[CandidateScore], candidates_count: int
+    ):
         self.pdf_reading_order = pdf_reading_order
         self.candidates_scores = candidates_scores
         self.candidates_count = candidates_count
@@ -15,8 +16,9 @@ class CandidatesEvaluator:
             next_token = self.get_next_token(token, page)
             sorted_candidates_scores = self.get_sorted_candidates_scores(token)
 
-            possible_candidates = [candidate_score.candidate for candidate_score in
-                                   sorted_candidates_scores[:self.candidates_count]]
+            possible_candidates = [
+                candidate_score.candidate for candidate_score in sorted_candidates_scores[: self.candidates_count]
+            ]
             contains_next_token.append(next_token in possible_candidates)
 
         return contains_next_token
@@ -37,7 +39,5 @@ class CandidatesEvaluator:
 
             if candidate_score.current_token == token:
                 list_of_candidates_scores.append(candidate_score)
-        list_of_candidates_scores = sorted(list_of_candidates_scores,
-                                           key=lambda x: x.score,
-                                           reverse=True)
+        list_of_candidates_scores = sorted(list_of_candidates_scores, key=lambda x: x.score, reverse=True)
         return list_of_candidates_scores

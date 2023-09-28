@@ -47,8 +47,9 @@ def train_for_benchmark():
 
 
 def predict_for_benchmark():
-    pdf_reading_order_list: list[PdfReadingOrderTokens] = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH,
-                                                                            filter_in="multi_column_test")
+    pdf_reading_order_list: list[PdfReadingOrderTokens] = load_labeled_data(
+        PDF_LABELED_DATA_ROOT_PATH, filter_in="multi_column_test"
+    )
 
     pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_list]
     trainer = ReadingOrderCandidatesTrainer(pdf_features_list, CANDIDATE_MODEL_CONFIGURATION)
@@ -63,9 +64,9 @@ def predict_for_benchmark():
     return trainer, pdf_reading_order_list, truths, predictions
 
 
-def evaluate_contains_next_token(trainer: ReadingOrderCandidatesTrainer,
-                                 pdf_reading_order_list: list[PdfReadingOrderTokens],
-                                 predictions: list[float]):
+def evaluate_contains_next_token(
+    trainer: ReadingOrderCandidatesTrainer, pdf_reading_order_list: list[PdfReadingOrderTokens], predictions: list[float]
+):
     candidates_scores: list[CandidateScore] = get_candidates_scores(trainer, predictions)
 
     for candidate_count in [1, 3, 6, 10]:
@@ -76,18 +77,18 @@ def evaluate_contains_next_token(trainer: ReadingOrderCandidatesTrainer,
 
         correct = [x for x in contains_next_token_list if x]
         accuracy = 100 * len(correct) / len(contains_next_token_list)
-        print('For candidate count', candidate_count)
-        print('Contains next token', round(accuracy, 2), '%')
-        print('Contains next token mistakes', len(contains_next_token_list) - len(correct))
+        print("For candidate count", candidate_count)
+        print("Contains next token", round(accuracy, 2), "%")
+        print("Contains next token mistakes", len(contains_next_token_list) - len(correct))
         print()
 
 
 def get_candidates_scores(trainer: ReadingOrderCandidatesTrainer, predictions: list[float]) -> list[CandidateScore]:
     candidates_scores: list[CandidateScore] = list()
     for index, (current_token, possible_candidate_token, page) in enumerate(trainer.loop_token_combinations()):
-        candidate_score = CandidateScore(current_token=current_token,
-                                         candidate=possible_candidate_token,
-                                         score=predictions[index])
+        candidate_score = CandidateScore(
+            current_token=current_token, candidate=possible_candidate_token, score=predictions[index]
+        )
         candidates_scores.append(candidate_score)
     return candidates_scores
 
