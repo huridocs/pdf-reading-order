@@ -29,9 +29,9 @@ def create_candidates_pickle():
     for label in loop_current_token_candidate_token_labels(trainer, pdf_reading_order_tokens_list):
         y.append(label)
 
-    with open(CANDIDATES_DATA_PATH, 'wb') as x_file:
+    with open(CANDIDATES_DATA_PATH, "wb") as x_file:
         pickle.dump(x, x_file)
-    with open(CANDIDATES_LABEL_PATH, 'wb') as y_file:
+    with open(CANDIDATES_LABEL_PATH, "wb") as y_file:
         pickle.dump(y, y_file)
 
 
@@ -45,9 +45,9 @@ def create_reading_order_pickle():
     for label in loop_reading_order_labels(trainer, pdf_reading_order_tokens_list):
         y.append(label)
 
-    with open(READING_ORDER_DATA_PATH, 'wb') as x_file:
+    with open(READING_ORDER_DATA_PATH, "wb") as x_file:
         pickle.dump(x, x_file)
-    with open(READING_ORDER_LABEL_PATH, 'wb') as y_file:
+    with open(READING_ORDER_LABEL_PATH, "wb") as y_file:
         pickle.dump(y, y_file)
 
 
@@ -63,9 +63,9 @@ def create_pickle_files():
 def get_data(data_path: str, label_path: str):
     print("Loading X from: ", data_path)
     print("Loading y from: ", label_path)
-    with open(data_path, 'rb') as f:
+    with open(data_path, "rb") as f:
         x_train = pickle.load(f)
-    with open(label_path, 'rb') as f:
+    with open(label_path, "rb") as f:
         y_train = pickle.load(f)
     return x_train, np.array(y_train)
 
@@ -89,22 +89,22 @@ def objective(trial: optuna.trial.Trial, task: str):
             val_data = lgb.Dataset(x_val, label=y_val, reference=train_data)
 
             params = {
-                'boosting_type': 'gbdt',
-                'objective': 'multiclass',
-                'metric': 'multi_logloss',
-                'learning_rate': 0.1,
-                'num_class': 2,
-                'num_leaves': trial.suggest_int('num_leaves', 10, 500),
-                'bagging_fraction': trial.suggest_float('bagging_fraction', 0.1, 1.0),
-                'bagging_freq': trial.suggest_int('bagging_freq', 1, 10),
-                'feature_fraction': trial.suggest_float('feature_fraction', 0.1, 1.0),
-                'lambda_l1': trial.suggest_float('lambda_l1', 1e-08, 10.0, log=True),
-                'lambda_l2': trial.suggest_float('lambda_l2', 1e-08, 10.0, log=True),
-                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 5, 100),
-                'feature_pre_filter': trial.suggest_categorical('feature_pre_filter', [False, True]),
+                "boosting_type": "gbdt",
+                "objective": "multiclass",
+                "metric": "multi_logloss",
+                "learning_rate": 0.1,
+                "num_class": 2,
+                "num_leaves": trial.suggest_int("num_leaves", 10, 500),
+                "bagging_fraction": trial.suggest_float("bagging_fraction", 0.1, 1.0),
+                "bagging_freq": trial.suggest_int("bagging_freq", 1, 10),
+                "feature_fraction": trial.suggest_float("feature_fraction", 0.1, 1.0),
+                "lambda_l1": trial.suggest_float("lambda_l1", 1e-08, 10.0, log=True),
+                "lambda_l2": trial.suggest_float("lambda_l2", 1e-08, 10.0, log=True),
+                "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 5, 100),
+                "feature_pre_filter": trial.suggest_categorical("feature_pre_filter", [False, True]),
                 # 'num_boost_round': 100,
-                'early_stopping_rounds': 10,
-                'verbose': -1
+                "early_stopping_rounds": 10,
+                "verbose": -1,
             }
             model = lgb.train(params, train_data, valid_sets=[train_data, val_data], num_boost_round=100)
             y_pred_scores = model.predict(x_val, num_iteration=model.best_iteration)
@@ -116,20 +116,20 @@ def objective(trial: optuna.trial.Trial, task: str):
 
 def optuna_automatic_tuning(task: str):
     create_pickle_files()
-    study = optuna.create_study(direction='maximize')
+    study = optuna.create_study(direction="maximize")
     objective_with_task = partial(objective, task=task)
     study.optimize(objective_with_task, n_trials=100)
 
-    print('Number of finished trials: ', len(study.trials))
-    print('Best trial: ')
+    print("Number of finished trials: ", len(study.trials))
+    print("Best trial: ")
     trial = study.best_trial
 
-    print('Value: ', trial.value)
-    print('Params: ')
+    print("Value: ", trial.value)
+    print("Params: ")
     result_string: str = ""
     for key, value in trial.params.items():
-        print(f'\t{key}: {value}')
-        result_string += f"\"{key}\": {value},\n"
+        print(f"\t{key}: {value}")
+        result_string += f'"{key}": {value},\n'
     result_string += f"-> Best trial value: {str(trial.value)}\n"
 
     result_string += "\n\n\n"

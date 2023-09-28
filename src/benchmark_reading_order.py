@@ -25,7 +25,9 @@ def loop_pdf_reading_order_tokens(pdf_reading_order_tokens_list: list[PdfReading
 def loop_current_token_candidate_token_labels(trainer, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens]):
     for _, candidate_token_1, candidate_token_2, _, page in trainer.loop_candidate_tokens():
         for pdf_reading_order_tokens in loop_pdf_reading_order_tokens(pdf_reading_order_tokens_list, page):
-            label = pdf_reading_order_tokens.labeled_page_by_raw_page[page].is_coming_earlier(candidate_token_1, candidate_token_2)
+            label = pdf_reading_order_tokens.labeled_page_by_raw_page[page].is_coming_earlier(
+                candidate_token_1, candidate_token_2
+            )
             yield label
 
 
@@ -39,11 +41,18 @@ def loop_next_id_by_current_ids(trainer, pdf_reading_order_tokens_list: list[Pdf
     token_count = 0
     for page, reading_order_by_token_id in loop_reading_order_labels(trainer, pdf_reading_order_tokens_list):
         token_count += len(page.tokens)
-        tokens_ids_in_reading_order = [dict_item[0] for dict_item in sorted(reading_order_by_token_id.items(), key=lambda item: item[1])]
+        tokens_ids_in_reading_order = [
+            dict_item[0] for dict_item in sorted(reading_order_by_token_id.items(), key=lambda item: item[1])
+        ]
         tokens_ids_in_reading_order.remove("pad_token")
-        next_id_by_current_id_labels = {current_id: next_id for current_id, next_id in zip(tokens_ids_in_reading_order, tokens_ids_in_reading_order[1:])}
+        next_id_by_current_id_labels = {
+            current_id: next_id for current_id, next_id in zip(tokens_ids_in_reading_order, tokens_ids_in_reading_order[1:])
+        }
         token_ids_by_prediction_order = [token.id for token in sorted(page.tokens, key=lambda t: t.prediction)]
-        next_id_by_current_id_predictions = {current_id: next_id for current_id, next_id in zip(token_ids_by_prediction_order, token_ids_by_prediction_order[1:])}
+        next_id_by_current_id_predictions = {
+            current_id: next_id
+            for current_id, next_id in zip(token_ids_by_prediction_order, token_ids_by_prediction_order[1:])
+        }
         for current_id, next_id in next_id_by_current_id_labels.items():
             yield current_id, next_id, next_id_by_current_id_predictions
     print(f"There are {token_count} tokens in tested data")
@@ -88,7 +97,9 @@ def get_reading_orders_for_benchmark():
     print("predicting")
     trainer.get_reading_ordered_pages(BENCHMARK_MODEL_PATH)
     mistakes = 0
-    for current_id, next_id, next_id_by_current_id_predictions in loop_next_id_by_current_ids(trainer, pdf_reading_order_tokens_list):
+    for current_id, next_id, next_id_by_current_id_predictions in loop_next_id_by_current_ids(
+        trainer, pdf_reading_order_tokens_list
+    ):
         if current_id not in next_id_by_current_id_predictions or next_id != next_id_by_current_id_predictions[current_id]:
             mistakes += 1
     print(f"There are {mistakes} sequential mistakes")
@@ -98,8 +109,9 @@ def benchmark():
     train_for_benchmark()
     truths, predictions = predict_for_benchmark()
     get_reading_orders_for_benchmark()
-    print("non-zero count:", np.count_nonzero(truths))
-    print("truths len:", len(truths))
+    print("label 1 count:", np.count_nonzero(truths))
+    print("label 0 count:", len(truths) - np.count_nonzero(truths))
+    print("total:", len(truths))
 
     f1 = round(f1_score(truths, predictions, average="macro") * 100, 2)
     accuracy = round(accuracy_score(truths, predictions) * 100, 2)
@@ -108,7 +120,7 @@ def benchmark():
 
 
 if __name__ == "__main__":
-    start = time()
     print("start")
+    start = time()
     benchmark()
     print("finished in", int(time() - start), "seconds")

@@ -42,5 +42,5 @@ class ReadingOrderCandidatesTrainer(PdfTrainer):
         prediction_scores = super().predict(model_path)
         predictions = []
         for prediction_score in prediction_scores:
-            predictions.append(int(np.argmax(prediction_score)))
+            predictions.append(prediction_score[1])
         return predictions
