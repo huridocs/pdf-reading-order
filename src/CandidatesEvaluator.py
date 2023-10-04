@@ -12,13 +12,22 @@ class CandidatesEvaluator:
 
     def contains_next_token(self):
         contains_next_token = list()
+        already_selected_tokens = list()
+        last_page = None
         for page, token in self.pdf_reading_order.pdf_features.loop_tokens():
+            if last_page != page:
+                already_selected_tokens = []
+                last_page = page
             next_token = self.get_next_token(token, page)
-            sorted_candidates_scores = self.get_sorted_candidates_scores(token)
+            if next_token is None:
+                continue
+            sorted_candidates_scores = [candidate_score for candidate_score in self.get_sorted_candidates_scores(token)
+                                        if candidate_score.candidate not in already_selected_tokens]
 
             possible_candidates = [
                 candidate_score.candidate for candidate_score in sorted_candidates_scores[: self.candidates_count]
             ]
+            already_selected_tokens.append(next_token)
             contains_next_token.append(next_token in possible_candidates)
 
         return contains_next_token
