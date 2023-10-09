@@ -3,9 +3,9 @@ from os.path import join
 from pathlib import Path
 from time import time
 from pdf_features.PdfPage import PdfPage
-
 from CandidateScore import CandidateScore
 from CandidatesEvaluator import CandidatesEvaluator
+from PopplerEvaluator import PopplerEvaluator
 from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 from sklearn.metrics import f1_score, accuracy_score
 from pdf_reading_order.config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
@@ -33,7 +33,7 @@ def loop_current_token_candidate_token_labels(trainer, pdf_reading_order_list: l
 
 
 def train_for_benchmark():
-    pdf_reading_order_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="multi_column_test")
+    pdf_reading_order_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
 
     pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_list]
     trainer = ReadingOrderCandidatesTrainer(pdf_features_list, CANDIDATE_MODEL_CONFIGURATION)
@@ -41,7 +41,6 @@ def train_for_benchmark():
     labels = []
     for label in loop_current_token_candidate_token_labels(trainer, pdf_reading_order_list):
         labels.append(label)
-
     os.makedirs(BENCHMARK_MODEL_PATH.parent, exist_ok=True)
     trainer.train(str(BENCHMARK_MODEL_PATH), labels)
 
@@ -69,7 +68,7 @@ def evaluate_contains_next_token(
 ):
     candidates_scores: list[CandidateScore] = get_candidates_scores(trainer, predictions)
 
-    for candidate_count in [1, 3, 6, 10]:
+    for candidate_count in [49, 50, 51]:
         contains_next_token_list = list()
         for pdf_reading_order in pdf_reading_order_list:
             candidates_evaluator = CandidatesEvaluator(pdf_reading_order, candidates_scores, candidate_count)
@@ -80,6 +79,25 @@ def evaluate_contains_next_token(
         print("For candidate count", candidate_count)
         print("Contains next token", round(accuracy, 2), "%")
         print("Contains next token mistakes", len(contains_next_token_list) - len(correct))
+        print()
+
+
+def evaluate_poppler_contains_next_token():
+    pdf_reading_order_list: list[PdfReadingOrderTokens] = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
+    token_count = 0
+    for pdf_reading_order in pdf_reading_order_list:
+        token_count += sum([len(page.tokens) for page in pdf_reading_order.pdf_features.pages])
+    for candidate_count in [1, 10, 25, 50, 100, 150, 200]:
+        missing_next_token_count = 0
+        for pdf_reading_order in pdf_reading_order_list:
+            poppler_evaluator = PopplerEvaluator(pdf_reading_order, candidate_count)
+            missing_next_token_count += poppler_evaluator.get_missing_next_token_count()
+
+        correct = token_count - missing_next_token_count
+        accuracy = 100 * correct / token_count
+        print("For candidate count: ", candidate_count)
+        print("Contains next token: ", round(accuracy, 2), "%")
+        print("Missing next token count: ", missing_next_token_count)
         print()
 
 
@@ -94,10 +112,11 @@ def get_candidates_scores(trainer: ReadingOrderCandidatesTrainer, predictions: l
 
 
 def benchmark():
-    # train_for_benchmark()
+    train_for_benchmark()
     trainer, pdf_reading_order_list, truths, predictions = predict_for_benchmark()
     evaluate_contains_next_token(trainer, pdf_reading_order_list, predictions)
-    # benchmark_scores(predictions, truths)
+    benchmark_scores(predictions, truths)
+    evaluate_poppler_contains_next_token()
 
 
 def benchmark_scores(predictions, truths):
