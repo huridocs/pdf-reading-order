@@ -8,26 +8,30 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 from benchmark_candidate_finder import loop_current_token_candidate_token_labels
 from benchmark_reading_order import loop_current_token_candidate_token_labels as loop_reading_order_labels
+from TableFigureProcessor import TableFigureProcessor
+from pdf_reading_order.ReadingOrderCandidatesLabelsTrainer import ReadingOrderCandidatesLabelsTrainer
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
+from pdf_reading_order.ReadingOrderLabelsTrainer import CANDIDATE_COUNT
 from pdf_reading_order.ReadingOrderTrainer import ReadingOrderTrainer
 from pdf_reading_order.load_labeled_data import load_labeled_data
 from pdf_reading_order.config import PDF_LABELED_DATA_ROOT_PATH
 
-CANDIDATES_DATA_PATH = "data/candidates_X.pickle"
-CANDIDATES_LABEL_PATH = "data/candidates_y.pickle"
-READING_ORDER_DATA_PATH = "data/reading_order_X.pickle"
-READING_ORDER_LABEL_PATH = "data/reading_order_y.pickle"
+CANDIDATES_DATA_PATH = "data/candidates_X_train.pickle"
+CANDIDATES_LABEL_PATH = "data/candidates_y_train.pickle"
+READING_ORDER_DATA_PATH = f"data/reading_order_{CANDIDATE_COUNT}_X_train.pickle"
+READING_ORDER_LABEL_PATH = f"data/reading_order_{CANDIDATE_COUNT}_y_train.pickle"
 
 
 def create_candidates_pickle():
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
+    print("Figures and tables are being processed...")
+    for pdf_reading_order_tokens in pdf_reading_order_tokens_list:
+        table_figure_processor = TableFigureProcessor(pdf_reading_order_tokens)
+        table_figure_processor.process()
+    print("Figures and table processing finished.")
 
-    pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
-    trainer = ReadingOrderCandidatesTrainer(pdf_features_list, None)
-    x = trainer.get_model_input()
-    y = []
-    for label in loop_current_token_candidate_token_labels(trainer, pdf_reading_order_tokens_list):
-        y.append(label)
+    trainer = ReadingOrderCandidatesLabelsTrainer(pdf_reading_order_tokens_list, None)
+    x, y = trainer.get_training_data()
 
     with open(CANDIDATES_DATA_PATH, "wb") as x_file:
         pickle.dump(x, x_file)
@@ -40,14 +44,20 @@ def create_reading_order_pickle():
 
     pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
     trainer = ReadingOrderTrainer(pdf_features_list, None)
+    print("Getting model input")
     x = trainer.get_model_input()
+
+    with open(READING_ORDER_DATA_PATH, 'wb') as x_file:
+        pickle.dump(x, x_file)
+
+    print("Getting labels")
     y = []
     for label in loop_reading_order_labels(trainer, pdf_reading_order_tokens_list):
         y.append(label)
 
     with open(READING_ORDER_DATA_PATH, "wb") as x_file:
         pickle.dump(x, x_file)
-    with open(READING_ORDER_LABEL_PATH, "wb") as y_file:
+    with open(READING_ORDER_LABEL_PATH, 'wb') as y_file:
         pickle.dump(y, y_file)
 
 
@@ -55,9 +65,9 @@ def create_pickle_files():
     if not exists(CANDIDATES_DATA_PATH):
         print("Getting candidates data")
         create_candidates_pickle()
-    # if not exists(READING_ORDER_DATA_PATH):
-    #     print("Getting reading order data")
-    #     create_reading_order_pickle()
+    if not exists(READING_ORDER_DATA_PATH):
+        print("Getting reading order data")
+        create_reading_order_pickle()
 
 
 def get_data(data_path: str, label_path: str):
@@ -76,7 +86,7 @@ def objective(trial: optuna.trial.Trial, task: str):
     else:
         X, y = get_data(READING_ORDER_DATA_PATH, READING_ORDER_LABEL_PATH)
     n_splits = 5
-    random_states = [42, 427, 311]
+    random_states = [129, 427, 741]
     roc_aucs = []
 
     for random_state in random_states:
@@ -139,4 +149,4 @@ def optuna_automatic_tuning(task: str):
 
 
 if __name__ == "__main__":
-    optuna_automatic_tuning("candidates")
+    optuna_automatic_tuning("reading_order")
