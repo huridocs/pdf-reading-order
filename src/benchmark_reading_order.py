@@ -104,6 +104,6 @@ def train_models_for_comparison():
     print(f"Elapsed time: {time() - start_time} seconds")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # train_models_for_comparison()
     test_for_benchmark()

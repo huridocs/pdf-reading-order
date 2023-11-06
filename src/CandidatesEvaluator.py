@@ -21,8 +21,11 @@ class CandidatesEvaluator:
             next_token = self.get_next_token(token, page)
             if next_token is None:
                 continue
-            sorted_candidates_scores = [candidate_score for candidate_score in self.get_sorted_candidates_scores(token)
-                                        if candidate_score.candidate not in already_selected_tokens]
+            sorted_candidates_scores = [
+                candidate_score
+                for candidate_score in self.get_sorted_candidates_scores(token)
+                if candidate_score.candidate not in already_selected_tokens
+            ]
 
             possible_candidates = [
                 candidate_score.candidate for candidate_score in sorted_candidates_scores[: self.candidates_count]

@@ -82,7 +82,6 @@ def test_for_benchmark():
     start_time = time()
     for model_name in sorted(os.listdir(join(ROOT_PATH, "model"))):
         for candidate_count in [18]:
-
             if not model_name.startswith("candidate"):
                 continue
             print(f"Testing: {model_name} with {candidate_count} candidate")
@@ -107,6 +106,6 @@ def train_models_for_comparison():
     print(f"Elapsed time: {time() - start_time} seconds")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     train_models_for_comparison()
     test_for_benchmark()

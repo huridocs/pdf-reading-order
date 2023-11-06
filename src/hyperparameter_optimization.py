@@ -49,7 +49,7 @@ def create_reading_order_pickle():
 
     with open(READING_ORDER_DATA_PATH, "wb") as x_file:
         pickle.dump(x, x_file)
-    with open(READING_ORDER_LABEL_PATH, 'wb') as y_file:
+    with open(READING_ORDER_LABEL_PATH, "wb") as y_file:
         pickle.dump(y, y_file)
 
 

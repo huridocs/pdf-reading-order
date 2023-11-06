@@ -52,7 +52,13 @@ class ReadingOrderCandidatesTrainer(ReadingOrderBase):
     def predict(self, model_path: str | Path = None, candidate_count: int = 18):
         mistake_count = 0
         model = lgb.Booster(model_file=model_path)
-        for current_token, possible_candidate_tokens, label_page, reading_order_no, next_token_in_poppler_order in self.loop_token_combinations():
+        for (
+            current_token,
+            possible_candidate_tokens,
+            label_page,
+            reading_order_no,
+            next_token_in_poppler_order,
+        ) in self.loop_token_combinations():
             candidate_tokens = self.get_candidate_tokens(candidate_count, current_token, model, possible_candidate_tokens)
             if next_token_in_poppler_order not in candidate_tokens:
                 candidate_tokens.append(next_token_in_poppler_order)
@@ -61,8 +67,10 @@ class ReadingOrderCandidatesTrainer(ReadingOrderBase):
         return mistake_count
 
     def get_candidate_tokens(self, candidate_count, current_token, model, possible_candidate_tokens):
-        features = [self.get_candidate_token_features(current_token, possible_candidate_token)
-                    for possible_candidate_token in possible_candidate_tokens]
+        features = [
+            self.get_candidate_token_features(current_token, possible_candidate_token)
+            for possible_candidate_token in possible_candidate_tokens
+        ]
         prediction_scores = model.predict(self.features_rows_to_x(features))
         candidate_token_indexes = np.argsort([prediction_scores[:, 1]], axis=1)[:, -candidate_count:]
         candidate_tokens = [possible_candidate_tokens[i] for i in candidate_token_indexes[0]]

@@ -16,15 +16,16 @@ from pdf_reading_order.ReadingOrderLabelPage import ReadingOrderLabelPage
 class TableFigureProcessor:
     def __init__(self, pdf_reading_order_tokens: PdfReadingOrderTokens, model_path: str | Path = None):
         self.pdf_reading_order_tokens = pdf_reading_order_tokens
-        self.paragraph_extractor = ParagraphExtractorTrainer([self.pdf_reading_order_tokens.pdf_features],
-                                                             PARAGRAPH_EXTRACTOR_CONFIGURATION)
+        self.paragraph_extractor = ParagraphExtractorTrainer(
+            [self.pdf_reading_order_tokens.pdf_features], PARAGRAPH_EXTRACTOR_CONFIGURATION
+        )
         self.model_path = paragraph_extraction_model_path if model_path is None else model_path
 
     @staticmethod
     def get_processed_token_from_paragraph(paragraph_tokens: list[PdfToken], label_page: ReadingOrderLabelPage):
         page_number = paragraph_tokens[0].page_number
-        tokens_in_poppler_order = sorted([token for token in paragraph_tokens], key=lambda t: int(t.id.split('_t')[-1]))
-        token_id_number = tokens_in_poppler_order[0].id.split('_t')[-1]
+        tokens_in_poppler_order = sorted([token for token in paragraph_tokens], key=lambda t: int(t.id.split("_t")[-1]))
+        token_id_number = tokens_in_poppler_order[0].id.split("_t")[-1]
         token_id = f"p{page_number}_m{token_id_number}"
         content = " ".join([token.content for token in paragraph_tokens])
         pdf_font = mode([token.font for token in paragraph_tokens])

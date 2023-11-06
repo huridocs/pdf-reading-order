@@ -11,8 +11,9 @@ from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 
 
 class ReadingOrderBase:
-    def __init__(self, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens],
-                 model_configuration: ModelConfiguration = None):
+    def __init__(
+        self, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens], model_configuration: ModelConfiguration = None
+    ):
         self.pdf_reading_order_tokens_list = pdf_reading_order_tokens_list
         self.model_configuration = model_configuration
 
