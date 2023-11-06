@@ -6,12 +6,9 @@ from os.path import exists
 from functools import partial
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
-from benchmark_candidate_finder import loop_current_token_candidate_token_labels
-from benchmark_reading_order import loop_current_token_candidate_token_labels as loop_reading_order_labels
 from TableFigureProcessor import TableFigureProcessor
-from pdf_reading_order.ReadingOrderCandidatesLabelsTrainer import ReadingOrderCandidatesLabelsTrainer
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
-from pdf_reading_order.ReadingOrderLabelsTrainer import CANDIDATE_COUNT
+from pdf_reading_order.ReadingOrderTrainer import CANDIDATE_COUNT
 from pdf_reading_order.ReadingOrderTrainer import ReadingOrderTrainer
 from pdf_reading_order.load_labeled_data import load_labeled_data
 from pdf_reading_order.config import PDF_LABELED_DATA_ROOT_PATH
@@ -22,15 +19,19 @@ READING_ORDER_DATA_PATH = f"data/reading_order_{CANDIDATE_COUNT}_X_train.pickle"
 READING_ORDER_LABEL_PATH = f"data/reading_order_{CANDIDATE_COUNT}_y_train.pickle"
 
 
-def create_candidates_pickle():
-    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
+def process_figures_and_tables(pdf_reading_order_tokens_list):
     print("Figures and tables are being processed...")
     for pdf_reading_order_tokens in pdf_reading_order_tokens_list:
         table_figure_processor = TableFigureProcessor(pdf_reading_order_tokens)
         table_figure_processor.process()
     print("Figures and table processing finished.")
 
-    trainer = ReadingOrderCandidatesLabelsTrainer(pdf_reading_order_tokens_list, None)
+
+def create_candidates_pickle():
+    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
+    process_figures_and_tables(pdf_reading_order_tokens_list)
+
+    trainer = ReadingOrderCandidatesTrainer(pdf_reading_order_tokens_list, None)
     x, y = trainer.get_training_data()
 
     with open(CANDIDATES_DATA_PATH, "wb") as x_file:
@@ -41,19 +42,10 @@ def create_candidates_pickle():
 
 def create_reading_order_pickle():
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
+    process_figures_and_tables(pdf_reading_order_tokens_list)
 
-    pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
-    trainer = ReadingOrderTrainer(pdf_features_list, None)
-    print("Getting model input")
-    x = trainer.get_model_input()
-
-    with open(READING_ORDER_DATA_PATH, 'wb') as x_file:
-        pickle.dump(x, x_file)
-
-    print("Getting labels")
-    y = []
-    for label in loop_reading_order_labels(trainer, pdf_reading_order_tokens_list):
-        y.append(label)
+    trainer = ReadingOrderTrainer(pdf_reading_order_tokens_list, None)
+    x, y = trainer.get_training_data()
 
     with open(READING_ORDER_DATA_PATH, "wb") as x_file:
         pickle.dump(x, x_file)
