@@ -1,126 +1,109 @@
 import os
+import pickle
 from os.path import join
-from pathlib import Path
+import numpy as np
 from time import time
 
-import numpy as np
-from pdf_features.PdfPage import PdfPage
-from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
-from sklearn.metrics import f1_score, accuracy_score
+from pdf_reading_order.ReadingOrderTrainer import ReadingOrderTrainer
 from pdf_reading_order.config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
 from pdf_reading_order.load_labeled_data import load_labeled_data
-from pdf_reading_order.ReadingOrderTrainer import ReadingOrderTrainer
 from pdf_reading_order.model_configuration import READING_ORDER_MODEL_CONFIGURATION
+from TableFigureProcessor import TableFigureProcessor
+from pdf_reading_order.ReadingOrderTrainer import CANDIDATE_COUNT
 
-BENCHMARK_MODEL_PATH = Path(join(ROOT_PATH, "model", "reading_order_benchmark.model"))
+BENCHMARK_MODEL_PATH = join(ROOT_PATH, "model", "reading_order_benchmark")
+READING_ORDER_X_TRAIN_PATH = f"data/reading_order_{CANDIDATE_COUNT}_X_train.pickle"
+READING_ORDER_Y_TRAIN_PATH = f"data/reading_order_{CANDIDATE_COUNT}_y_train.pickle"
+READING_ORDER_X_TEST_PATH = f"data/reading_order_{CANDIDATE_COUNT}_X_test.pickle"
+READING_ORDER_Y_TEST_PATH = f"data/reading_order_{CANDIDATE_COUNT}_y_test.pickle"
+PDF_READING_ORDER_TOKENS_TRAIN_PATH = "data/pdf_reading_order_tokens_train.pickle"
+PDF_READING_ORDER_TOKENS_TEST_PATH = "data/pdf_reading_order_tokens_test.pickle"
 
 
-def loop_pdf_reading_order_tokens(pdf_reading_order_tokens_list: list[PdfReadingOrderTokens], page: PdfPage):
-    for pdf_reading_order_tokens in pdf_reading_order_tokens_list:
-        if page not in pdf_reading_order_tokens.labeled_page_by_raw_page:
+def prepare_features(dataset_type, x_path, y_path):
+    pdf_reading_order_tokens_list = get_pdf_reading_order_tokens(dataset_type)
+    trainer = ReadingOrderTrainer(pdf_reading_order_tokens_list, None)
+    x, y = trainer.get_training_data()
+    with open(x_path, "wb") as x_file:
+        pickle.dump(x, x_file)
+    with open(y_path, "wb") as y_file:
+        pickle.dump(y, y_file)
+    return x, np.array(y)
+
+
+def get_features(dataset_type: str = "train"):
+    x_path = READING_ORDER_X_TRAIN_PATH if dataset_type == "train" else READING_ORDER_X_TEST_PATH
+    y_path = READING_ORDER_Y_TRAIN_PATH if dataset_type == "train" else READING_ORDER_Y_TEST_PATH
+    if os.path.exists(x_path) and os.path.exists(y_path):
+        with open(x_path, "rb") as f:
+            x_features = pickle.load(f)
+        with open(y_path, "rb") as f:
+            y_features = np.array(pickle.load(f))
+        return x_features, np.array(y_features)
+
+    return prepare_features(dataset_type, x_path, y_path)
+
+
+def prepare_pdf_reading_order_tokens_list(dataset_type, file_path):
+    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
+    for pdf_reading_order in pdf_reading_order_tokens_list:
+        table_figure_processor = TableFigureProcessor(pdf_reading_order)
+        table_figure_processor.process()
+    with open(file_path, "wb") as pdf_reading_order_tokens_file:
+        pickle.dump(pdf_reading_order_tokens_list, pdf_reading_order_tokens_file)
+    return pdf_reading_order_tokens_list
+
+
+def get_pdf_reading_order_tokens(dataset_type: str = "train"):
+    file_path = PDF_READING_ORDER_TOKENS_TRAIN_PATH if dataset_type == "train" else PDF_READING_ORDER_TOKENS_TEST_PATH
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            return pickle.load(f)
+
+    return prepare_pdf_reading_order_tokens_list(dataset_type, file_path)
+
+
+def train_for_benchmark(model_path: str, include_test_set: bool = False):
+    x_train, y_train = get_features("train")
+    if include_test_set:
+        x_test, y_test = get_features("test")
+        x_train = np.concatenate((x_train, x_test), axis=0)
+        y_train = np.append(y_train, y_test)
+    trainer = ReadingOrderTrainer([], READING_ORDER_MODEL_CONFIGURATION)
+    trainer.train(model_path, x_train, y_train)
+
+
+def test_for_benchmark():
+    pdf_reading_order_tokens_list = get_pdf_reading_order_tokens("train")
+    pdf_reading_order_tokens_list.extend(get_pdf_reading_order_tokens("test"))
+    results = []
+    for model_name in sorted(os.listdir(join(ROOT_PATH, "model"))):
+        if not model_name.startswith("reading_order"):
             continue
-        yield pdf_reading_order_tokens
+        print(f"Testing: {model_name}")
+        model_path = join(join(ROOT_PATH, "model", model_name))
+        trainer = ReadingOrderTrainer(pdf_reading_order_tokens_list, READING_ORDER_MODEL_CONFIGURATION)
+        start_time = time()
+        mistake_count_for_model = trainer.predict(model_path)
+        end_time = time() - start_time
+        print(f"{model_name}: {mistake_count_for_model} mistakes found. Total time: {end_time}")
+        results.append([model_name, mistake_count_for_model, end_time])
+    results.sort(key=lambda result: result[1])
+    for result in results:
+        print(result)
 
 
-def loop_current_token_candidate_token_labels(trainer, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens]):
-    for _, candidate_token_1, candidate_token_2, _, page in trainer.loop_candidate_tokens():
-        for pdf_reading_order_tokens in loop_pdf_reading_order_tokens(pdf_reading_order_tokens_list, page):
-            label = pdf_reading_order_tokens.labeled_page_by_raw_page[page].is_coming_earlier(
-                candidate_token_1, candidate_token_2
-            )
-            yield label
+def train_models_for_comparison():
+    start_time = time()
+    for num_boost_round in [250, 400, 500, 700, 800]:
+        for num_leaves in [31, 63, 127, 191, 255]:
+            READING_ORDER_MODEL_CONFIGURATION.num_boost_round = num_boost_round
+            READING_ORDER_MODEL_CONFIGURATION.num_leaves = num_leaves
+            model_path: str = BENCHMARK_MODEL_PATH + f"_nbr{num_boost_round}_nl{num_leaves}.model"
+            train_for_benchmark(model_path)
+    print(f"Elapsed time: {time() - start_time} seconds")
 
 
-def loop_reading_order_labels(trainer, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens]):
-    for _, page in trainer.loop_token_features():
-        for pdf_reading_order_tokens in loop_pdf_reading_order_tokens(pdf_reading_order_tokens_list, page):
-            yield page, pdf_reading_order_tokens.labeled_page_by_raw_page[page].reading_order_by_token_id
-
-
-def loop_next_id_by_current_ids(trainer, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens]):
-    token_count = 0
-    for page, reading_order_by_token_id in loop_reading_order_labels(trainer, pdf_reading_order_tokens_list):
-        token_count += len(page.tokens)
-        tokens_ids_in_reading_order = [
-            dict_item[0] for dict_item in sorted(reading_order_by_token_id.items(), key=lambda item: item[1])
-        ]
-        tokens_ids_in_reading_order.remove("pad_token")
-        next_id_by_current_id_labels = {
-            current_id: next_id for current_id, next_id in zip(tokens_ids_in_reading_order, tokens_ids_in_reading_order[1:])
-        }
-        token_ids_by_prediction_order = [token.id for token in sorted(page.tokens, key=lambda t: t.prediction)]
-        next_id_by_current_id_predictions = {
-            current_id: next_id
-            for current_id, next_id in zip(token_ids_by_prediction_order, token_ids_by_prediction_order[1:])
-        }
-        for current_id, next_id in next_id_by_current_id_labels.items():
-            yield current_id, next_id, next_id_by_current_id_predictions
-    print(f"There are {token_count} tokens in tested data")
-
-
-def train_for_benchmark():
-    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
-
-    pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
-    trainer = ReadingOrderTrainer(pdf_features_list, READING_ORDER_MODEL_CONFIGURATION)
-    # trainer.set_token_types()
-
-    labels = []
-    for label in loop_current_token_candidate_token_labels(trainer, pdf_reading_order_tokens_list):
-        labels.append(label)
-
-    os.makedirs(BENCHMARK_MODEL_PATH.parent, exist_ok=True)
-    trainer.train(str(BENCHMARK_MODEL_PATH), labels)
-
-
-def predict_for_benchmark():
-    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="test")
-
-    pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
-    trainer = ReadingOrderTrainer(pdf_features_list, READING_ORDER_MODEL_CONFIGURATION)
-    # trainer.set_token_types()
-
-    truths = []
-    for label in loop_current_token_candidate_token_labels(trainer, pdf_reading_order_tokens_list):
-        truths.append(label)
-    print("predicting")
-    predictions = trainer.predict(BENCHMARK_MODEL_PATH)
-    print(len(truths))
-    print(len(predictions))
-    return truths, predictions
-
-
-def get_reading_orders_for_benchmark():
-    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="test")
-    pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_tokens_list]
-    trainer = ReadingOrderTrainer(pdf_features_list, READING_ORDER_MODEL_CONFIGURATION)
-    print("predicting")
-    trainer.get_reading_ordered_pages(BENCHMARK_MODEL_PATH)
-    mistakes = 0
-    for current_id, next_id, next_id_by_current_id_predictions in loop_next_id_by_current_ids(
-        trainer, pdf_reading_order_tokens_list
-    ):
-        if current_id not in next_id_by_current_id_predictions or next_id != next_id_by_current_id_predictions[current_id]:
-            mistakes += 1
-    print(f"There are {mistakes} sequential mistakes")
-
-
-def benchmark():
-    train_for_benchmark()
-    truths, predictions = predict_for_benchmark()
-    get_reading_orders_for_benchmark()
-    print("label 1 count:", np.count_nonzero(truths))
-    print("label 0 count:", len(truths) - np.count_nonzero(truths))
-    print("total:", len(truths))
-
-    f1 = round(f1_score(truths, predictions, average="macro") * 100, 2)
-    accuracy = round(accuracy_score(truths, predictions) * 100, 2)
-    print(f"F1 score {f1}%")
-    print(f"Accuracy score {accuracy}%")
-
-
-if __name__ == "__main__":
-    print("start")
-    start = time()
-    benchmark()
-    print("finished in", int(time() - start), "seconds")
+if __name__ == '__main__':
+    # train_models_for_comparison()
+    test_for_benchmark()
