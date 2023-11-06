@@ -1,134 +1,112 @@
 import os
+import pickle
 from os.path import join
-from pathlib import Path
+import numpy as np
 from time import time
-from pdf_features.PdfPage import PdfPage
-from CandidateScore import CandidateScore
-from CandidatesEvaluator import CandidatesEvaluator
-from PopplerEvaluator import PopplerEvaluator
-from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
-from sklearn.metrics import f1_score, accuracy_score
 from pdf_reading_order.config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
 from pdf_reading_order.load_labeled_data import load_labeled_data
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
 from pdf_reading_order.model_configuration import CANDIDATE_MODEL_CONFIGURATION
+from TableFigureProcessor import TableFigureProcessor
 
-BENCHMARK_MODEL_PATH = Path(join(ROOT_PATH, "model", "candidate_selector_benchmark.model"))
-
-
-def loop_pdf_reading_order_tokens(pdf_reading_order_list: list[PdfReadingOrderTokens], page: PdfPage):
-    for pdf_reading_order_tokens in pdf_reading_order_list:
-        if page not in pdf_reading_order_tokens.labeled_page_by_raw_page:
-            continue
-        yield pdf_reading_order_tokens
-
-
-def loop_current_token_candidate_token_labels(trainer, pdf_reading_order_list: list[PdfReadingOrderTokens]):
-    for current_token, possible_candidate_token, page in trainer.loop_token_combinations():
-        for pdf_reading_order_tokens in loop_pdf_reading_order_tokens(pdf_reading_order_list, page):
-            label = pdf_reading_order_tokens.labeled_page_by_raw_page[page].is_next_token(
-                current_token, possible_candidate_token
-            )
-            yield label
+BENCHMARK_MODEL_PATH = join(ROOT_PATH, "model", "candidate_selector_benchmark")
+CANDIDATES_X_TRAIN_PATH = "data/candidates_X_train.pickle"
+CANDIDATES_Y_TRAIN_PATH = "data/candidates_y_train.pickle"
+CANDIDATES_X_TEST_PATH = "data/candidates_X_test.pickle"
+CANDIDATES_Y_TEST_PATH = "data/candidates_y_test.pickle"
+PDF_READING_ORDER_TOKENS_TRAIN_PATH = "data/pdf_reading_order_tokens_train.pickle"
+PDF_READING_ORDER_TOKENS_TEST_PATH = "data/pdf_reading_order_tokens_test.pickle"
 
 
-def train_for_benchmark():
-    pdf_reading_order_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
-
-    pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_list]
-    trainer = ReadingOrderCandidatesTrainer(pdf_features_list, CANDIDATE_MODEL_CONFIGURATION)
-
-    labels = []
-    for label in loop_current_token_candidate_token_labels(trainer, pdf_reading_order_list):
-        labels.append(label)
-    os.makedirs(BENCHMARK_MODEL_PATH.parent, exist_ok=True)
-    trainer.train(str(BENCHMARK_MODEL_PATH), labels)
-
-
-def predict_for_benchmark():
-    pdf_reading_order_list: list[PdfReadingOrderTokens] = load_labeled_data(
-        PDF_LABELED_DATA_ROOT_PATH, filter_in="multi_column_test"
-    )
-
-    pdf_features_list = [pdf_reading_order_tokens.pdf_features for pdf_reading_order_tokens in pdf_reading_order_list]
-    trainer = ReadingOrderCandidatesTrainer(pdf_features_list, CANDIDATE_MODEL_CONFIGURATION)
-
-    truths = []
-    for label in loop_current_token_candidate_token_labels(trainer, pdf_reading_order_list):
-        truths.append(label)
-
-    print("predicting")
-    predictions = trainer.predict(BENCHMARK_MODEL_PATH)
-
-    return trainer, pdf_reading_order_list, truths, predictions
+def prepare_features(dataset_type, x_path, y_path):
+    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
+    for pdf_reading_order in pdf_reading_order_tokens_list:
+        table_figure_processor = TableFigureProcessor(pdf_reading_order)
+        table_figure_processor.process()
+    trainer = ReadingOrderCandidatesTrainer(pdf_reading_order_tokens_list, None)
+    x, y = trainer.get_training_data()
+    with open(x_path, "wb") as x_file:
+        pickle.dump(x, x_file)
+    with open(y_path, "wb") as y_file:
+        pickle.dump(y, y_file)
+    return x, np.array(y)
 
 
-def evaluate_contains_next_token(
-    trainer: ReadingOrderCandidatesTrainer, pdf_reading_order_list: list[PdfReadingOrderTokens], predictions: list[float]
-):
-    candidates_scores: list[CandidateScore] = get_candidates_scores(trainer, predictions)
+def get_features(dataset_type: str = "train"):
+    x_path = CANDIDATES_X_TRAIN_PATH if dataset_type == "train" else CANDIDATES_X_TEST_PATH
+    y_path = CANDIDATES_Y_TRAIN_PATH if dataset_type == "train" else CANDIDATES_Y_TEST_PATH
 
-    for candidate_count in [49, 50, 51]:
-        contains_next_token_list = list()
-        for pdf_reading_order in pdf_reading_order_list:
-            candidates_evaluator = CandidatesEvaluator(pdf_reading_order, candidates_scores, candidate_count)
-            contains_next_token_list.extend(candidates_evaluator.contains_next_token())
+    if os.path.exists(x_path) and os.path.exists(y_path):
+        with open(x_path, "rb") as f:
+            x_features = pickle.load(f)
+        with open(y_path, "rb") as f:
+            y_features = np.array(pickle.load(f))
+        return x_features, np.array(y_features)
 
-        correct = [x for x in contains_next_token_list if x]
-        accuracy = 100 * len(correct) / len(contains_next_token_list)
-        print("For candidate count", candidate_count)
-        print("Contains next token", round(accuracy, 2), "%")
-        print("Contains next token mistakes", len(contains_next_token_list) - len(correct))
-        print()
+    return prepare_features(dataset_type, x_path, y_path)
 
 
-def evaluate_poppler_contains_next_token():
-    pdf_reading_order_list: list[PdfReadingOrderTokens] = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
-    token_count = 0
-    for pdf_reading_order in pdf_reading_order_list:
-        token_count += sum([len(page.tokens) for page in pdf_reading_order.pdf_features.pages])
-    for candidate_count in [1, 10, 25, 50, 100, 150, 200]:
-        missing_next_token_count = 0
-        for pdf_reading_order in pdf_reading_order_list:
-            poppler_evaluator = PopplerEvaluator(pdf_reading_order, candidate_count)
-            missing_next_token_count += poppler_evaluator.get_missing_next_token_count()
-
-        correct = token_count - missing_next_token_count
-        accuracy = 100 * correct / token_count
-        print("For candidate count: ", candidate_count)
-        print("Contains next token: ", round(accuracy, 2), "%")
-        print("Missing next token count: ", missing_next_token_count)
-        print()
+def prepare_pdf_reading_order_tokens_list(dataset_type, file_path):
+    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
+    for pdf_reading_order in pdf_reading_order_tokens_list:
+        table_figure_processor = TableFigureProcessor(pdf_reading_order)
+        table_figure_processor.process()
+    with open(file_path, "wb") as pdf_reading_order_tokens_file:
+        pickle.dump(pdf_reading_order_tokens_list, pdf_reading_order_tokens_file)
+    return pdf_reading_order_tokens_list
 
 
-def get_candidates_scores(trainer: ReadingOrderCandidatesTrainer, predictions: list[float]) -> list[CandidateScore]:
-    candidates_scores: list[CandidateScore] = list()
-    for index, (current_token, possible_candidate_token, page) in enumerate(trainer.loop_token_combinations()):
-        candidate_score = CandidateScore(
-            current_token=current_token, candidate=possible_candidate_token, score=predictions[index]
-        )
-        candidates_scores.append(candidate_score)
-    return candidates_scores
+def get_pdf_reading_order_tokens(dataset_type: str = "train"):
+    file_path = PDF_READING_ORDER_TOKENS_TRAIN_PATH if dataset_type == "train" else PDF_READING_ORDER_TOKENS_TEST_PATH
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            return pickle.load(f)
+
+    return prepare_pdf_reading_order_tokens_list(dataset_type, file_path)
 
 
-def benchmark():
-    train_for_benchmark()
-    trainer, pdf_reading_order_list, truths, predictions = predict_for_benchmark()
-    evaluate_contains_next_token(trainer, pdf_reading_order_list, predictions)
-    benchmark_scores(predictions, truths)
-    evaluate_poppler_contains_next_token()
+def train_for_benchmark(model_path: str, include_test_set: bool = False):
+    x_train, y_train = get_features("train")
+    if include_test_set:
+        x_test, y_test = get_features("test")
+        x_train = np.concatenate((x_train, x_test), axis=0)
+        y_train = np.append(y_train, y_test)
+    trainer = ReadingOrderCandidatesTrainer([], CANDIDATE_MODEL_CONFIGURATION)
+    trainer.train(model_path, x_train, y_train)
 
 
-def benchmark_scores(predictions, truths):
-    predictions_for_benchmark = [1 if prediction > 0.5 else 0 for prediction in predictions]
-    f1 = round(f1_score(truths, predictions_for_benchmark, average="macro") * 100, 2)
-    accuracy = round(accuracy_score(truths, predictions_for_benchmark) * 100, 2)
-    print(f"F1 score {f1}%")
-    print(f"Accuracy score {accuracy}%")
+def test_for_benchmark():
+    pdf_reading_order_tokens_list = get_pdf_reading_order_tokens("train")
+    pdf_reading_order_tokens_list.extend(get_pdf_reading_order_tokens("test"))
+    results = []
+    start_time = time()
+    for model_name in sorted(os.listdir(join(ROOT_PATH, "model"))):
+        for candidate_count in [18]:
+
+            if not model_name.startswith("candidate"):
+                continue
+            print(f"Testing: {model_name} with {candidate_count} candidate")
+            model_path = join(join(ROOT_PATH, "model", model_name))
+            trainer = ReadingOrderCandidatesTrainer(pdf_reading_order_tokens_list, CANDIDATE_MODEL_CONFIGURATION)
+            mistake_count_for_model = trainer.predict(model_path, candidate_count)
+            results.append([model_name, mistake_count_for_model, candidate_count])
+    print(f"Elapsed time: {time() - start_time} seconds")
+    results.sort(key=lambda result: result[1])
+    for result in results:
+        print(result)
 
 
-if __name__ == "__main__":
-    print("start")
-    start = time()
-    benchmark()
-    print("finished in", int(time() - start), "seconds")
+def train_models_for_comparison():
+    start_time = time()
+    for num_boost_round in [500]:
+        for num_leaves in [455]:
+            CANDIDATE_MODEL_CONFIGURATION.num_boost_round = num_boost_round
+            CANDIDATE_MODEL_CONFIGURATION.num_leaves = num_leaves
+            model_path: str = BENCHMARK_MODEL_PATH + f"_nbr{num_boost_round}_nl{num_leaves}.model"
+            train_for_benchmark(model_path)
+    print(f"Elapsed time: {time() - start_time} seconds")
+
+
+if __name__ == '__main__':
+    train_models_for_comparison()
+    test_for_benchmark()
