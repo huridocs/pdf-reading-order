@@ -1,11 +1,12 @@
-from pathlib import Path
 import numpy as np
-from itertools import permutations
+import lightgbm as lgb
+from pathlib import Path
 from pdf_features.PdfToken import PdfToken
-from pdf_tokens_type_trainer.PdfTrainer import PdfTrainer
+from pdf_reading_order.ReadingOrderLabelPage import ReadingOrderLabelPage
+from pdf_reading_order.ReadingOrderBase import ReadingOrderBase
 
 
-class ReadingOrderCandidatesTrainer(PdfTrainer):
+class ReadingOrderCandidatesTrainer(ReadingOrderBase):
     @staticmethod
     def get_candidate_token_features(token_1: PdfToken, token_2: PdfToken):
         return [
@@ -20,27 +21,49 @@ class ReadingOrderCandidatesTrainer(PdfTrainer):
             token_1.bounding_box.bottom - token_2.bounding_box.top,
         ]
 
-    def loop_pages(self):
-        for pdf_features in self.pdfs_features:
-            for page in pdf_features.pages:
-                yield page
+    @staticmethod
+    def get_next_token(reading_order_no: int, label_page: ReadingOrderLabelPage, possible_candidate_tokens: list[PdfToken]):
+        for possible_candidate_token in possible_candidate_tokens:
+            if label_page.reading_order_by_token_id[possible_candidate_token.id] == reading_order_no:
+                return possible_candidate_token
 
     def loop_token_combinations(self):
-        for page in self.loop_pages():
-            page_tokens = [self.get_padding_token(-1, page.page_number)] + page.tokens
-            for current_token, possible_candidate_token in permutations(page_tokens, 2):
-                yield current_token, possible_candidate_token, page
+        for pdf_reading_order, page in self.loop_pages():
+            label_page = pdf_reading_order.labeled_page_by_raw_page[page]
+            current_token = self.get_padding_token(-1, page.page_number)
+            reading_order_no = 1
+            possible_candidate_tokens = page.tokens.copy()
+            for i in range(len(page.tokens)):
+                next_token_in_poppler_order = page.tokens[i]
+                yield current_token, possible_candidate_tokens, label_page, reading_order_no, next_token_in_poppler_order
+                current_token = self.get_next_token(reading_order_no, label_page, possible_candidate_tokens)
+                reading_order_no += 1
+                possible_candidate_tokens.remove(current_token)
 
-    def get_model_input(self):
+    def get_training_data(self):
         features_rows = []
-        for current_token, possible_candidate_token, _ in self.loop_token_combinations():
-            features_rows.append(self.get_candidate_token_features(current_token, possible_candidate_token))
+        labels = []
+        for current_token, possible_candidate_tokens, label_page, _, _ in self.loop_token_combinations():
+            for possible_candidate_token in possible_candidate_tokens:
+                features_rows.append(self.get_candidate_token_features(current_token, possible_candidate_token))
+                labels.append(int(label_page.is_next_token(current_token, possible_candidate_token)))
+        return self.features_rows_to_x(features_rows), labels
 
-        return self.features_rows_to_x(features_rows)
+    def predict(self, model_path: str | Path = None, candidate_count: int = 18):
+        mistake_count = 0
+        model = lgb.Booster(model_file=model_path)
+        for current_token, possible_candidate_tokens, label_page, reading_order_no, next_token_in_poppler_order in self.loop_token_combinations():
+            candidate_tokens = self.get_candidate_tokens(candidate_count, current_token, model, possible_candidate_tokens)
+            if next_token_in_poppler_order not in candidate_tokens:
+                candidate_tokens.append(next_token_in_poppler_order)
+            if self.get_next_token(reading_order_no, label_page, possible_candidate_tokens) not in candidate_tokens:
+                mistake_count += 1
+        return mistake_count
 
-    def predict(self, model_path: str | Path = None):
-        prediction_scores = super().predict(model_path)
-        predictions = []
-        for prediction_score in prediction_scores:
-            predictions.append(prediction_score[1])
-        return predictions
+    def get_candidate_tokens(self, candidate_count, current_token, model, possible_candidate_tokens):
+        features = [self.get_candidate_token_features(current_token, possible_candidate_token)
+                    for possible_candidate_token in possible_candidate_tokens]
+        prediction_scores = model.predict(self.features_rows_to_x(features))
+        candidate_token_indexes = np.argsort([prediction_scores[:, 1]], axis=1)[:, -candidate_count:]
+        candidate_tokens = [possible_candidate_tokens[i] for i in candidate_token_indexes[0]]
+        return candidate_tokens
