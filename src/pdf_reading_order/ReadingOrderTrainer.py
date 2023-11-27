@@ -146,18 +146,8 @@ class ReadingOrderTrainer(ReadingOrderBase):
             token.prediction = reading_order_by_token_id[token.id]
         page.tokens.sort(key=lambda _token: _token.prediction)
 
-    def get_reading_ordered_pages(self, model_path: str | Path = None):
+    def predict(self, model_path: str | Path = None):
         lightgbm_model = lgb.Booster(model_file=model_path)
         for pdf_reading_order_tokens, token_features, page in self.loop_token_features():
             reading_order_by_token_id = self.get_reading_orders_for_page(lightgbm_model, token_features, page)
             self.reorder_page_tokens(page, reading_order_by_token_id)
-
-    def predict(self, model_path: str | Path = None):
-        self.get_reading_ordered_pages(model_path)
-        mistakes = 0
-        for pdf_reading_order_tokens, _, page in self.loop_token_features():
-            label_page = pdf_reading_order_tokens.labeled_page_by_raw_page[page]
-            for token_1, token_2 in zip(page.tokens, page.tokens[1:]):
-                if not label_page.is_next_token(token_1, token_2):
-                    mistakes += 1
-        return mistakes
