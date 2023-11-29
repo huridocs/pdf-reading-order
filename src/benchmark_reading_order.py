@@ -26,6 +26,8 @@ def prepare_features(dataset_type, x_path, y_path):
     pdf_reading_order_tokens_list = get_pdf_reading_order_tokens(dataset_type)
     trainer = ReadingOrderTrainer(pdf_reading_order_tokens_list, None)
     x, y = trainer.get_training_data()
+    if not os.path.exists(join(ROOT_PATH, "src", "data")):
+        os.makedirs(join(ROOT_PATH, "src", "data"))
     with open(x_path, "wb") as x_file:
         pickle.dump(x, x_file)
     with open(y_path, "wb") as y_file:
@@ -63,9 +65,11 @@ def find_mistake_count(pdf_reading_order_tokens_list: list[PdfReadingOrderTokens
 
 def prepare_pdf_reading_order_tokens_list(dataset_type, file_path):
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
-    for pdf_reading_order in pdf_reading_order_tokens_list:
-        table_figure_processor = TableFigureProcessor(pdf_reading_order)
-        table_figure_processor.process()
+    start_time = time()
+    table_figure_processor = TableFigureProcessor(pdf_reading_order_tokens_list)
+    table_figure_processor.process()
+    total_time = time() - start_time
+    print(f"Table figure processing took: {round(total_time, 2)} seconds.")
     with open(file_path, "wb") as pdf_reading_order_tokens_file:
         pickle.dump(pdf_reading_order_tokens_list, pdf_reading_order_tokens_file)
     return pdf_reading_order_tokens_list
@@ -74,6 +78,8 @@ def prepare_pdf_reading_order_tokens_list(dataset_type, file_path):
 def get_pdf_reading_order_tokens(dataset_type: str = "train"):
     print(f"Loading {dataset_type} data...")
     file_path = PDF_READING_ORDER_TOKENS_TRAIN_PATH if dataset_type == "train" else PDF_READING_ORDER_TOKENS_TEST_PATH
+    if not os.path.exists(join(ROOT_PATH, "src", "data")):
+        os.makedirs(join(ROOT_PATH, "src", "data"))
     if os.path.exists(file_path):
         with open(file_path, "rb") as f:
             return pickle.load(f)
@@ -112,4 +118,4 @@ def benchmark(get_granular_scores: bool):
 
 if __name__ == "__main__":
     train_for_benchmark()
-    benchmark(False)
+    benchmark(True)

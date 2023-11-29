@@ -14,3 +14,4 @@ src/.pytest_cache
 /model/
 /src/data/
 /src/tuned_parameters/
+/src/benchmark_table.txt
