@@ -19,12 +19,11 @@ PDF_READING_ORDER_TOKENS_TEST_PATH = "data/pdf_reading_order_tokens_test.pickle"
 
 
 def prepare_features(dataset_type, x_path, y_path):
-    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
-    for pdf_reading_order in pdf_reading_order_tokens_list:
-        table_figure_processor = TableFigureProcessor(pdf_reading_order)
-        table_figure_processor.process()
+    pdf_reading_order_tokens_list = get_pdf_reading_order_tokens(dataset_type)
     trainer = ReadingOrderCandidatesTrainer(pdf_reading_order_tokens_list, None)
     x, y = trainer.get_training_data()
+    if not os.path.exists(join(ROOT_PATH, "src", "data")):
+        os.makedirs(join(ROOT_PATH, "src", "data"))
     with open(x_path, "wb") as x_file:
         pickle.dump(x, x_file)
     with open(y_path, "wb") as y_file:
@@ -48,9 +47,13 @@ def get_features(dataset_type: str = "train"):
 
 def prepare_pdf_reading_order_tokens_list(dataset_type, file_path):
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
-    for pdf_reading_order in pdf_reading_order_tokens_list:
-        table_figure_processor = TableFigureProcessor(pdf_reading_order)
-        table_figure_processor.process()
+    start_time = time()
+    table_figure_processor = TableFigureProcessor(pdf_reading_order_tokens_list)
+    table_figure_processor.process()
+    total_time = time() - start_time
+    print(f"Table figure processing took: {round(total_time, 2)} seconds.")
+    if not os.path.exists(join(ROOT_PATH, "src", "data")):
+        os.makedirs(join(ROOT_PATH, "src", "data"))
     with open(file_path, "wb") as pdf_reading_order_tokens_file:
         pickle.dump(pdf_reading_order_tokens_list, pdf_reading_order_tokens_file)
     return pdf_reading_order_tokens_list
@@ -76,8 +79,7 @@ def train_for_benchmark(model_path: str, include_test_set: bool = False):
 
 
 def test_for_benchmark():
-    pdf_reading_order_tokens_list = get_pdf_reading_order_tokens("train")
-    pdf_reading_order_tokens_list.extend(get_pdf_reading_order_tokens("test"))
+    pdf_reading_order_tokens_list = get_pdf_reading_order_tokens("test")
     results = []
     start_time = time()
     for model_name in sorted(os.listdir(join(ROOT_PATH, "model"))):
