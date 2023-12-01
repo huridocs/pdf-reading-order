@@ -1,7 +1,5 @@
 from pdf_features.PdfPage import PdfPage
 from pdf_features.PdfToken import PdfToken
-from pdf_features.Rectangle import Rectangle
-
 from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 
 
