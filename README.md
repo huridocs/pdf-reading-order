@@ -36,4 +36,8 @@ Train a new model:
 ## Use a custom model
     
     python src/predict.py /path/to/pdf --model-path /path/to/model
+
+## Process figures and tables
+
+    python src/predict.py /path/to/pdf --extract-figures-and-tables
     
