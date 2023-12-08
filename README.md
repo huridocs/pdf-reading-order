@@ -6,7 +6,7 @@ Create venv:
 
     make install_venv
 
-Get the token types from a PDF:
+Get the reading order of a PDF:
 
     source venv/bin/activate
     python src/predict.py /path/to/pdf
@@ -30,7 +30,8 @@ Create venv:
 Train a new model:
 
     source venv/bin/activate
-    python src/train.py
+    python src/create_candidate_finder_model.py
+    python src/create_reading_order_model.py
 
 ## Use a custom model
     
