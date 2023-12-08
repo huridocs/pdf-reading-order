@@ -1,3 +1,5 @@
+import os
+
 import lightgbm as lgb
 import numpy as np
 from random import shuffle
@@ -11,9 +13,14 @@ from pdf_reading_order.config import ROOT_PATH
 from pdf_reading_order.ReadingOrderBase import ReadingOrderBase
 from pdf_reading_order.ReadingOrderLabelPage import ReadingOrderLabelPage
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer as CandidatesTrainer
+from pdf_reading_order.download_models import reading_order_model
+from pdf_reading_order.download_models import candidate_selector_model
 
 CANDIDATE_COUNT = 18
-CANDIDATE_TOKEN_MODEL = lgb.Booster(model_file=Path(join(ROOT_PATH, "model", "candidate_selector_benchmark.model")))
+candidate_selector_model_path = join(ROOT_PATH, "model", "candidate_selector_benchmark.model")
+if not os.path.exists(candidate_selector_model_path):
+    candidate_selector_model_path = candidate_selector_model
+CANDIDATE_TOKEN_MODEL = lgb.Booster(model_file=candidate_selector_model_path)
 
 
 class ReadingOrderTrainer(ReadingOrderBase):
@@ -102,6 +109,7 @@ class ReadingOrderTrainer(ReadingOrderBase):
         page.tokens.sort(key=lambda _token: _token.prediction)
 
     def predict(self, model_path: str | Path = None):
+        model_path = model_path if model_path else reading_order_model
         lightgbm_model = lgb.Booster(model_file=model_path)
         for pdf_reading_order_tokens, token_features, page in self.loop_token_features():
             reading_order_by_token_id = self.get_reading_orders_for_page(lightgbm_model, token_features, page)
