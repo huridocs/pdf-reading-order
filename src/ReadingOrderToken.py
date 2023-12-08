@@ -14,5 +14,5 @@ class ReadingOrderToken:
             "bounding_box": self.bounding_box.to_dict(),
             "content": self.content,
             "token_type": self.token_type.value,
-            "reading_order_no": self.reading_order_no
+            "reading_order_no": self.reading_order_no,
         }
