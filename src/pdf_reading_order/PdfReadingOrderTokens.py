@@ -1,5 +1,4 @@
 from os.path import join
-
 from pdf_features.PdfPage import PdfPage
 from pdf_features.Rectangle import Rectangle
 from pdf_token_type_labels.PdfLabels import PdfLabels
@@ -49,7 +48,7 @@ class PdfReadingOrderTokens:
                     continue
                 if label in used_labels:
                     continue
-                if token.inside_label(label):
+                if label.intersection_percentage(token.bounding_box) > 99.9:
                     used_labels.append(label)
                     labeled_page_by_raw_page[page].reading_order_by_token_id[token.id] = label.label_type
                     break
