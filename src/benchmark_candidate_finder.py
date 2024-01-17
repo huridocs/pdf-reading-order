@@ -3,11 +3,12 @@ import pickle
 from os.path import join
 import numpy as np
 from time import time
+from pdf_token_type_labels.TokenType import TokenType
 from pdf_reading_order.config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
 from pdf_reading_order.load_labeled_data import load_labeled_data
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
 from pdf_reading_order.model_configuration import CANDIDATE_MODEL_CONFIGURATION
-from TableFigureProcessor import TableFigureProcessor
+from SegmentProcessor import SegmentProcessor
 
 BENCHMARK_MODEL_PATH = join(ROOT_PATH, "model", "candidate_selector_benchmark")
 CANDIDATES_X_TRAIN_PATH = "data/candidates_X_train.pickle"
@@ -48,7 +49,7 @@ def get_features(dataset_type: str = "train"):
 def prepare_pdf_reading_order_tokens_list(dataset_type, file_path):
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
     start_time = time()
-    table_figure_processor = TableFigureProcessor(pdf_reading_order_tokens_list)
+    table_figure_processor = SegmentProcessor(pdf_reading_order_tokens_list, [TokenType.FIGURE, TokenType.TABLE])
     table_figure_processor.process()
     total_time = time() - start_time
     print(f"Table figure processing took: {round(total_time, 2)} seconds.")
