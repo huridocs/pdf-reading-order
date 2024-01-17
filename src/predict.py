@@ -1,8 +1,9 @@
 import typer
+from pdf_token_type_labels.TokenType import TokenType
 from pdf_tokens_type_trainer.TokenTypeTrainer import TokenTypeTrainer
 from OrderedPage import OrderedPage
 from pdf_features.PdfFeatures import PdfFeatures
-from TableFigureProcessor import TableFigureProcessor
+from SegmentProcessor import SegmentProcessor
 from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 from pdf_tokens_type_trainer.ModelConfiguration import ModelConfiguration
 from pdf_reading_order.ReadingOrderTrainer import ReadingOrderTrainer
@@ -14,7 +15,7 @@ def predict(pdf_path: str, extract_figures_and_tables: bool = False, model_path:
     token_type_trainer = TokenTypeTrainer([pdf_features])
     token_type_trainer.set_token_types()
     if extract_figures_and_tables:
-        table_figure_processor = TableFigureProcessor([pdf_reading_order_tokens])
+        table_figure_processor = SegmentProcessor([pdf_reading_order_tokens], [TokenType.FIGURE, TokenType.TABLE])
         table_figure_processor.process()
     trainer = ReadingOrderTrainer([pdf_reading_order_tokens], ModelConfiguration())
     trainer.predict(model_path)
