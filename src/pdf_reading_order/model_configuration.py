@@ -39,8 +39,29 @@ reading_order_config_json = {
     "deterministic": True,
 }
 
+
+segmented_reading_order_config_json = {
+    "boosting_type": "gbdt",
+    "verbose": -1,
+    "learning_rate": 0.1,
+    "num_class": 2,
+    "context_size": 18,
+    "num_boost_round": 400,
+    "num_leaves": 490,
+    "bagging_fraction": 0.9737322102732517,
+    "bagging_freq": 8,
+    "feature_fraction": 0.2818771210976459,
+    "lambda_l1": 4.188768069014224e-08,
+    "lambda_l2": 0.0028784995521791176,
+    "min_data_in_leaf": 34,
+    "feature_pre_filter": True,
+    "seed": 22,
+    "deterministic": True,
+}
+
 CANDIDATE_MODEL_CONFIGURATION = ModelConfiguration(**candidate_config_json)
 READING_ORDER_MODEL_CONFIGURATION = ModelConfiguration(**reading_order_config_json)
+SEGMENTED_READING_ORDER_MODEL_CONFIGURATION = ModelConfiguration(**segmented_reading_order_config_json)
 
 
 if __name__ == "__main__":
