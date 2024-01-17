@@ -1,17 +1,18 @@
+from os.path import exists
+from os import makedirs
 from tabulate import tabulate
-
 from PredictionInfo import PredictionInfo
-
 from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 
 
 class BenchmarkTable:
-    def __init__(self, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens], total_time: float):
+    def __init__(self, pdf_reading_order_tokens_list: list[PdfReadingOrderTokens], total_time: float, table_name=""):
         self.pdf_paragraphs_tokens_list: list[PdfReadingOrderTokens] = pdf_reading_order_tokens_list
         self.total_time = total_time
         self.prediction_info_list = [
             PredictionInfo(pdf_reading_order_tokens) for pdf_reading_order_tokens in pdf_reading_order_tokens_list
         ]
+        self.table_name = table_name
 
     @staticmethod
     def get_mistakes_for_file(predictions_for_file: PredictionInfo):
@@ -57,7 +58,10 @@ class BenchmarkTable:
         table_headers = ["File Type", "Mistakes"]
         table_rows, total_label_count, total_mistake_count = self.get_benchmark_table_rows()
         average_accuracy = round(100 - (100 * total_mistake_count / total_label_count), 2)
-        with open("benchmark_table.txt", "w") as benchmark_file:
+        if not exists("benchmark_tables"):
+            makedirs("benchmark_tables")
+        table_path = f"benchmark_tables/benchmark_table{self.table_name}.txt"
+        with open(table_path, "w") as benchmark_file:
             benchmark_table = (
                 tabulate(tabular_data=table_rows, headers=table_headers)
                 + "\n\n"
