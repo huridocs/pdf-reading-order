@@ -3,13 +3,14 @@ import pickle
 from os.path import join
 import numpy as np
 from time import time
+from pdf_token_type_labels.TokenType import TokenType
 from BenchmarkTable import BenchmarkTable
+from SegmentProcessor import SegmentProcessor
 from pdf_reading_order.PdfReadingOrderTokens import PdfReadingOrderTokens
 from pdf_reading_order.ReadingOrderTrainer import ReadingOrderTrainer
 from pdf_reading_order.config import ROOT_PATH, PDF_LABELED_DATA_ROOT_PATH
 from pdf_reading_order.load_labeled_data import load_labeled_data
 from pdf_reading_order.model_configuration import READING_ORDER_MODEL_CONFIGURATION
-from TableFigureProcessor import TableFigureProcessor
 from pdf_reading_order.ReadingOrderTrainer import CANDIDATE_COUNT
 
 BENCHMARK_MODEL_PATH = join(ROOT_PATH, "model", "reading_order_benchmark.model")
@@ -66,7 +67,7 @@ def find_mistake_count(pdf_reading_order_tokens_list: list[PdfReadingOrderTokens
 def prepare_pdf_reading_order_tokens_list(dataset_type, file_path):
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in=dataset_type)
     start_time = time()
-    table_figure_processor = TableFigureProcessor(pdf_reading_order_tokens_list)
+    table_figure_processor = SegmentProcessor(pdf_reading_order_tokens_list, [TokenType.FIGURE, TokenType.TABLE])
     table_figure_processor.process()
     total_time = time() - start_time
     print(f"Table figure processing took: {round(total_time, 2)} seconds.")
