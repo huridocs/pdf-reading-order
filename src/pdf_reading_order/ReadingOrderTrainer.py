@@ -16,6 +16,7 @@ from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidat
 from pdf_reading_order.download_models import reading_order_model
 from pdf_reading_order.download_models import candidate_selector_model
 
+USE_CANDIDATES_MODEL = True
 CANDIDATE_COUNT = 18
 candidate_selector_model_path = join(ROOT_PATH, "model", "candidate_selector_benchmark.model")
 if not os.path.exists(candidate_selector_model_path):
@@ -58,8 +59,10 @@ class ReadingOrderTrainer(ReadingOrderBase):
             reading_order_no = 1
             remaining_tokens = page.tokens.copy()
             for i in range(len(page.tokens)):
-                candidate_tokens = self.get_candidate_tokens(current_token, remaining_tokens)
-                yield current_token, candidate_tokens, token_features, label_page, page
+                candidates = (
+                    self.get_candidate_tokens(current_token, remaining_tokens) if USE_CANDIDATES_MODEL else remaining_tokens
+                )
+                yield current_token, candidates, token_features, label_page, page
                 current_token = self.get_next_token_label(reading_order_no, label_page, remaining_tokens)
                 reading_order_no += 1
                 remaining_tokens.remove(current_token)
@@ -94,7 +97,9 @@ class ReadingOrderTrainer(ReadingOrderBase):
         reading_order_by_token_id = {}
         current_reading_order_no = 1
         for i in range(len(page.tokens)):
-            candidates = self.get_candidate_tokens(current_token, remaining_tokens)
+            candidates = (
+                self.get_candidate_tokens(current_token, remaining_tokens) if USE_CANDIDATES_MODEL else remaining_tokens
+            )
             current_token = self.find_next_token(lightgbm_model, token_features, page.tokens, candidates, current_token)
             remaining_tokens.remove(current_token)
             reading_order_by_token_id[current_token.id] = current_reading_order_no
