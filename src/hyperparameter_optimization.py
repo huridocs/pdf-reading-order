@@ -4,9 +4,12 @@ import pickle
 import numpy as np
 from os.path import exists
 from functools import partial
+from pdf_token_type_labels.TokenType import TokenType
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
-from TableFigureProcessor import TableFigureProcessor
+
+import pdf_reading_order.ReadingOrderTrainer
+from SegmentProcessor import SegmentProcessor
 from pdf_reading_order.ReadingOrderCandidatesTrainer import ReadingOrderCandidatesTrainer
 from pdf_reading_order.ReadingOrderTrainer import CANDIDATE_COUNT
 from pdf_reading_order.ReadingOrderTrainer import ReadingOrderTrainer
@@ -17,19 +20,20 @@ CANDIDATES_DATA_PATH = "data/candidates_X_train.pickle"
 CANDIDATES_LABEL_PATH = "data/candidates_y_train.pickle"
 READING_ORDER_DATA_PATH = f"data/reading_order_{CANDIDATE_COUNT}_X_train.pickle"
 READING_ORDER_LABEL_PATH = f"data/reading_order_{CANDIDATE_COUNT}_y_train.pickle"
+SEGMENTED_READING_ORDER_DATA_PATH = f"data/segmented_reading_order_X_train.pickle"
+SEGMENTED_READING_ORDER_LABEL_PATH = f"data/segmented_reading_order_y_train.pickle"
 
 
-def process_figures_and_tables(pdf_reading_order_tokens_list):
+def process_segments(pdf_reading_order_tokens_list, segment_types: list[TokenType] = None):
     print("Figures and tables are being processed...")
-    for pdf_reading_order_tokens in pdf_reading_order_tokens_list:
-        table_figure_processor = TableFigureProcessor(pdf_reading_order_tokens)
-        table_figure_processor.process()
+    table_figure_processor = SegmentProcessor(pdf_reading_order_tokens_list, segment_types)
+    table_figure_processor.process()
     print("Figures and table processing finished.")
 
 
 def create_candidates_pickle():
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
-    process_figures_and_tables(pdf_reading_order_tokens_list)
+    process_segments(pdf_reading_order_tokens_list, [TokenType.FIGURE, TokenType.TABLE])
 
     trainer = ReadingOrderCandidatesTrainer(pdf_reading_order_tokens_list, None)
     x, y = trainer.get_training_data()
@@ -42,7 +46,7 @@ def create_candidates_pickle():
 
 def create_reading_order_pickle():
     pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
-    process_figures_and_tables(pdf_reading_order_tokens_list)
+    process_segments(pdf_reading_order_tokens_list, [TokenType.FIGURE, TokenType.TABLE])
 
     trainer = ReadingOrderTrainer(pdf_reading_order_tokens_list, None)
     x, y = trainer.get_training_data()
@@ -53,6 +57,20 @@ def create_reading_order_pickle():
         pickle.dump(y, y_file)
 
 
+def create_segmented_reading_order_pickle():
+    pdf_reading_order_tokens_list = load_labeled_data(PDF_LABELED_DATA_ROOT_PATH, filter_in="train")
+    process_segments(pdf_reading_order_tokens_list)
+
+    pdf_reading_order.ReadingOrderTrainer.USE_CANDIDATES_MODEL = False
+    trainer = ReadingOrderTrainer(pdf_reading_order_tokens_list, None)
+    x, y = trainer.get_training_data()
+
+    with open(SEGMENTED_READING_ORDER_DATA_PATH, "wb") as x_file:
+        pickle.dump(x, x_file)
+    with open(SEGMENTED_READING_ORDER_LABEL_PATH, "wb") as y_file:
+        pickle.dump(y, y_file)
+
+
 def create_pickle_files():
     if not exists(CANDIDATES_DATA_PATH):
         print("Getting candidates data")
@@ -60,6 +78,9 @@ def create_pickle_files():
     if not exists(READING_ORDER_DATA_PATH):
         print("Getting reading order data")
         create_reading_order_pickle()
+    if not exists(SEGMENTED_READING_ORDER_DATA_PATH):
+        print("Getting segmented reading order data")
+        create_segmented_reading_order_pickle()
 
 
 def get_data(data_path: str, label_path: str):
@@ -75,8 +96,11 @@ def get_data(data_path: str, label_path: str):
 def objective(trial: optuna.trial.Trial, task: str):
     if task == "candidates":
         X, y = get_data(CANDIDATES_DATA_PATH, CANDIDATES_LABEL_PATH)
-    else:
+    elif task == "reading_order":
         X, y = get_data(READING_ORDER_DATA_PATH, READING_ORDER_LABEL_PATH)
+    elif task == "segmented_reading_order":
+        X, y = get_data(SEGMENTED_READING_ORDER_DATA_PATH, SEGMENTED_READING_ORDER_LABEL_PATH)
+
     n_splits = 5
     random_states = [129, 427, 741]
     roc_aucs = []
@@ -141,4 +165,4 @@ def optuna_automatic_tuning(task: str):
 
 
 if __name__ == "__main__":
-    optuna_automatic_tuning("reading_order")
+    optuna_automatic_tuning("segmented_reading_order")
