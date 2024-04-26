@@ -94,7 +94,7 @@ class ReadingOrderTrainer(ReadingOrderBase):
     def get_reading_orders_for_page(self, lightgbm_model: lgb.Booster, token_features: TokenFeatures, page: PdfPage):
         current_token = self.get_padding_token(-1, page.page_number)
         remaining_tokens = page.tokens.copy()
-        reading_order_by_token_id = {}
+        reading_order_by_token = {}
         current_reading_order_no = 1
         for i in range(len(page.tokens)):
             candidates = (
@@ -102,20 +102,20 @@ class ReadingOrderTrainer(ReadingOrderBase):
             )
             current_token = self.find_next_token(lightgbm_model, token_features, page.tokens, candidates, current_token)
             remaining_tokens.remove(current_token)
-            reading_order_by_token_id[current_token.id] = current_reading_order_no
+            reading_order_by_token[current_token] = current_reading_order_no
             current_reading_order_no += 1
 
-        return reading_order_by_token_id
+        return reading_order_by_token
 
     @staticmethod
-    def reorder_page_tokens(page: PdfPage, reading_order_by_token_id: dict[str, int]):
+    def reorder_page_tokens(page: PdfPage, reading_order_by_token: dict[PdfToken, int]):
         for token in page.tokens:
-            token.prediction = reading_order_by_token_id[token.id]
+            token.prediction = reading_order_by_token[token]
         page.tokens.sort(key=lambda _token: _token.prediction)
 
     def predict(self, model_path: str | Path = None):
         model_path = model_path if model_path else reading_order_model
         lightgbm_model = lgb.Booster(model_file=model_path)
         for pdf_reading_order_tokens, token_features, page in self.loop_token_features():
-            reading_order_by_token_id = self.get_reading_orders_for_page(lightgbm_model, token_features, page)
-            self.reorder_page_tokens(page, reading_order_by_token_id)
+            reading_order_by_token = self.get_reading_orders_for_page(lightgbm_model, token_features, page)
+            self.reorder_page_tokens(page, reading_order_by_token)
